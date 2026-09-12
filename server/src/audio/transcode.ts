@@ -106,7 +106,17 @@ export function wavDurationSeconds(wav: Buffer): number {
   while (offset + 8 <= wav.length) {
     const id = wav.toString("ascii", offset, offset + 4);
     const size = wav.readUInt32LE(offset + 4);
-    if (id === "data") return size / byteRate;
+    if (id === "data") {
+      // When ffmpeg writes to a pipe it cannot seek back to patch the length, so
+      // it leaves a placeholder (0, or 0xFFFFFFFF). Trusting it yields nonsense
+      // like 134217.7 seconds for a four-second clip - measure the bytes instead.
+      const declared = size;
+      const actual = wav.length - (offset + 8);
+      const usable =
+        declared === 0 || declared === 0xffff_ffff || declared > actual ? actual : declared;
+      return usable / byteRate;
+    }
+    if (size === 0 || size === 0xffff_ffff) break;
     offset += 8 + size + (size % 2);
   }
   throw new Error("No data chunk found in WAV");

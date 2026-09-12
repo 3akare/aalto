@@ -11,9 +11,9 @@
     "test": "node --require ts-node/register/transpile-only --test src/**/*.test.ts",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "corpus": "ts-node-dev --transpile-only --once src/benchmark/prepareCorpus.ts",
-    "benchmark": "ts-node-dev --transpile-only --once src/benchmark/runBenchmark.ts",
-    "smoke": "ts-node-dev --transpile-only --once src/benchmark/smoke.ts"
+    "corpus": "node --require ts-node/register/transpile-only src/benchmark/prepareCorpus.ts",
+    "benchmark": "node --require ts-node/register/transpile-only src/benchmark/runBenchmark.ts",
+    "smoke": "node --require ts-node/register/transpile-only src/benchmark/smoke.ts"
   },
   "dependencies": {
     "@doist/todoist-sdk": "^15.2.0",

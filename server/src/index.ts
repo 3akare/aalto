@@ -107,7 +107,7 @@ app.post("/api/voice-command", requireApiKey, upload.single("audio"), async (req
     if (confirmationText && !muted) {
       const ttsResult = await tts.generate({
         text: confirmationText,
-        voiceAccent: "nigerian",
+        voiceAccent: "yoruba",
         voiceGender: "female",
         voiceLanguage: "en",
       });

@@ -120,7 +120,7 @@ export class GeminiSttProvider implements SttProvider {
             input: [{ type: "text" as const, text: GEMINI_FLASH_PROMPT }, audioPart],
             generation_config: {
               temperature: 0,
-              thinking_level: "minimal",
+              thinking_level: "low",
             },
           };
 
