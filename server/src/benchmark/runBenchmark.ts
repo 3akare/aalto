@@ -4,7 +4,8 @@ import path from "node:path";
 import { config } from "../config";
 import { AssemblyAiSttProvider } from "../stt/assemblyai";
 import { GeminiSttProvider } from "../stt/gemini";
-import { IntronSttProvider } from "../stt/intron";
+import { INTRON_SUPPORTED } from "../stt/intron";
+import { IntronStreamSttProvider } from "../stt/intronStream";
 import type { SttProvider } from "../stt/types";
 import { addCounts, type ErrorCounts, rate, scoreUtterance, ZERO } from "./metrics";
 import { normalizeReference, normalizeText, type Track } from "./normalize";
@@ -35,7 +36,11 @@ const RATE_LIMITS: Record<string, number> = { intron: 30 };
 
 function buildProviders(): SttProvider[] {
   const providers: SttProvider[] = [
-    new IntronSttProvider(config.intron.apiKey, config.intron.baseUrl),
+    // Streaming, not the sync endpoint: sync rejects anything over ~5s on this
+    // account with a spurious "insufficient balance", and AfriSwitch utterances
+    // average ~12s. Disclosed in the report - it is Intron's production path, but
+    // it is a different endpoint class from the others' batch APIs.
+    new IntronStreamSttProvider(config.intron.apiKey, INTRON_SUPPORTED),
   ];
   if (config.assemblyai.apiKey) {
     providers.push(new AssemblyAiSttProvider(config.assemblyai.apiKey));

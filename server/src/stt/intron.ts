@@ -12,7 +12,7 @@ import type { SttProvider, TranscribeOptions, TranscriptionResult } from "./type
  */
 
 /** Intron documents code-switching support for 11 pairs; these are the AfriSwitch ones. */
-const INTRON_SUPPORTED = new Set([
+export const INTRON_SUPPORTED: ReadonlySet<string> = new Set([
   "af",
   "am",
   "en",

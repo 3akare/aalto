@@ -7,7 +7,8 @@ import { TodoistClient } from "../integrations/todoist";
 import { Planner } from "../orchestrator/planner";
 import { AssemblyAiSttProvider } from "../stt/assemblyai";
 import { GeminiSttProvider } from "../stt/gemini";
-import { IntronSttProvider } from "../stt/intron";
+import { INTRON_SUPPORTED } from "../stt/intron";
+import { IntronStreamSttProvider } from "../stt/intronStream";
 import type { SttProvider } from "../stt/types";
 import { IntronTtsProvider } from "../tts/intron";
 
@@ -53,7 +54,7 @@ async function main(): Promise<void> {
   // 2. Every STT provider on identical bytes --------------------------------
   if (wav) {
     const providers: SttProvider[] = [
-      new IntronSttProvider(config.intron.apiKey, config.intron.baseUrl),
+      new IntronStreamSttProvider(config.intron.apiKey, INTRON_SUPPORTED),
       new AssemblyAiSttProvider(config.assemblyai.apiKey),
       new GeminiSttProvider(config.gemini.apiKey, {
         kind: "transcribe",

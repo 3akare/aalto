@@ -6,7 +6,8 @@ import { assertServerConfig, config } from "./config";
 import { TodoistClient } from "./integrations/todoist";
 import { Planner } from "./orchestrator/planner";
 import { isServerSide, type RoutedAction } from "./orchestrator/tools";
-import { IntronSttProvider } from "./stt/intron";
+import { INTRON_SUPPORTED } from "./stt/intron";
+import { IntronStreamSttProvider } from "./stt/intronStream";
 import { IntronTtsProvider } from "./tts/intron";
 
 assertServerConfig();
@@ -27,7 +28,9 @@ app.use(express.json());
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
-const stt = new IntronSttProvider(config.intron.apiKey, config.intron.baseUrl);
+// Streaming: the sync endpoint caps at ~5s on this account, and spoken commands
+// routinely run longer than that.
+const stt = new IntronStreamSttProvider(config.intron.apiKey, INTRON_SUPPORTED);
 const tts = new IntronTtsProvider(config.intron.apiKey, config.intron.baseUrl);
 const planner = new Planner(config.gemini.apiKey, config.gemini.plannerModel);
 const todoist = new TodoistClient(config.todoist.apiToken);
