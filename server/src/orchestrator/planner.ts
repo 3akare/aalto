@@ -1,0 +1,134 @@
+import { GoogleGenAI } from "@google/genai";
+import { type AaltoToolName, GEMINI_TOOLS, type RoutedAction } from "./tools";
+
+/**
+ * Turns one spoken utterance into a PLAN of tasks.
+ *
+ * This replaces the previous single-shot router, which forced exactly one tool
+ * call and returned the first one - so "open the portal, search for the form, and
+ * remind me to file on Friday" could only ever do one of those three things.
+ *
+ * Gemini's Interactions API returns `interaction.steps[]`, and several
+ * `function_call` steps in one response is exactly the fan-out needed: the
+ * executor then runs independent tasks concurrently and one summary is spoken back.
+ */
+
+const SYSTEM_PROMPT = `You are the planner for Aalto, a voice-controlled browser agent used by people
+who speak naturally code-switched language - mixing English with a local language such as Yoruba,
+Hausa, Pidgin, Igbo, or Swahili.
+
+The transcript you receive may itself be code-switched, may contain speech-recognition errors, and
+may drop articles or use non-standard word order. Interpret intent generously rather than requiring
+well-formed English.
+
+An utterance may contain SEVERAL requests. Emit one function call for EACH distinct task the speaker
+asked for, in the order they said them. Do not collapse several requests into one, and do not invent
+tasks the speaker did not ask for.
+
+If a request is ambiguous or is missing information you would have to guess at, call "clarify"
+instead of guessing - especially for anything that fills in a form or changes an existing task,
+where a wrong guess is worse than a question.`;
+
+export interface PlannedTask extends RoutedAction {
+  /** Stable id used to correlate the executor's result and the SSE progress events. */
+  id: string;
+}
+
+export interface Plan {
+  tasks: PlannedTask[];
+  /** Gemini interaction id, so a follow-up turn can continue the same timeline. */
+  interactionId?: string;
+  /** Any prose the model emitted alongside the calls. */
+  text?: string;
+}
+
+export interface PlannerContext {
+  /** Titles/URLs of the user's open tabs, so switch_tab picks a real one. */
+  openTabs?: { title: string; url: string }[];
+  /** Visible question labels on the active form, so fill_form_field targets a real field. */
+  formLabels?: string[];
+}
+
+export class Planner {
+  private client: GoogleGenAI;
+
+  constructor(
+    apiKey: string,
+    private model: string
+  ) {
+    this.client = new GoogleGenAI({ apiKey });
+  }
+
+  async plan(transcript: string, context: PlannerContext = {}): Promise<Plan> {
+    const contextLines: string[] = [];
+    if (context.openTabs?.length) {
+      contextLines.push(
+        `Open tabs:\n${context.openTabs.map((t, i) => `  ${i + 1}. ${t.title} — ${t.url}`).join("\n")}`
+      );
+    }
+    if (context.formLabels?.length) {
+      // Giving the planner the real labels stops it guessing blind and inventing
+      // field names the content script then has to fuzzy-match against.
+      contextLines.push(
+        `Questions on the form currently open:\n${context.formLabels.map((l) => `  - ${l}`).join("\n")}`
+      );
+    }
+
+    const input = [
+      { type: "text" as const, text: SYSTEM_PROMPT },
+      ...(contextLines.length ? [{ type: "text" as const, text: contextLines.join("\n\n") }] : []),
+      { type: "text" as const, text: `Transcript: ${transcript}` },
+    ];
+
+    const interaction = await this.client.interactions.create({
+      model: this.model,
+      input,
+      tools: GEMINI_TOOLS,
+      generation_config: { temperature: 0, thinking_level: "low" },
+      // biome-ignore lint/suspicious/noExplicitAny: generation_config and the tool shape are not yet in the SDK's typed request union
+    } as any);
+
+    // biome-ignore lint/suspicious/noExplicitAny: steps[] is loosely typed in the SDK
+    const steps: any[] = (interaction as any)?.steps ?? [];
+    const tasks: PlannedTask[] = steps
+      .filter((s) => s?.type === "function_call")
+      .map((s, i) => ({
+        id: `t${i + 1}`,
+        tool: s.name as AaltoToolName,
+        // Arguments arrive as either a parsed object or a JSON string depending on
+        // the step; never string-match on the serialised form.
+        input: typeof s.arguments === "string" ? safeParse(s.arguments) : (s.arguments ?? {}),
+      }));
+
+    if (tasks.length === 0) {
+      return {
+        tasks: [
+          {
+            id: "t1",
+            tool: "clarify",
+            input: { question: "Sorry, I didn't catch that. Could you say it again?" },
+          },
+        ],
+        // biome-ignore lint/suspicious/noExplicitAny: id field is untyped
+        interactionId: (interaction as any)?.id,
+        text: interaction.output_text ?? undefined,
+      };
+    }
+
+    return {
+      tasks,
+      // biome-ignore lint/suspicious/noExplicitAny: id field is untyped
+      interactionId: (interaction as any)?.id,
+      text: interaction.output_text ?? undefined,
+    };
+  }
+}
+
+function safeParse(s: string): Record<string, unknown> {
+  try {
+    const v = JSON.parse(s);
+    return v && typeof v === "object" ? v : {};
+  } catch {
+    return {};
+  }
+}

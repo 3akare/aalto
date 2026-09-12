@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Aalto — Voice Browser Agent",
+  "version": "0.1.0",
+  "description": "Speak to search, manage tabs, fill Google Forms, and update Todoist tasks — in code-switched language.",
+  "permissions": ["tabs", "activeTab", "scripting", "storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Aalto" },
+  "content_scripts": [
+    {
+      "matches": ["https://docs.google.com/forms/*"],
+      "js": ["content-forms.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": { "128": "icons/icon128.png" }
+}
