@@ -55,6 +55,10 @@ export interface UtteranceMetrics {
   englishSpansTotal: number;
   /** Switch points counted from the tags, for cross-checking the corpus metadata. */
   switchPointCount: number;
+  /** Errors on entity tokens - numbers and proper nouns. */
+  entity: ErrorCounts;
+  entityNumber: ErrorCounts;
+  entityName: ErrorCounts;
   alignment: Alignment<string>;
 }
 
@@ -111,6 +115,36 @@ export function scoreUtterance(
 
   const { deleted, total } = englishSpanDeletions(a, refTags);
 
+  // Entity error. A transcript can score a respectable WER and still be useless
+  // for filling in a form if it got the name and the phone number wrong, because
+  // those are a handful of tokens among hundreds of function words. Scoring them
+  // separately asks the question the product actually cares about.
+  const entityKind = reference.map((t, i) => classifyEntity(t, i));
+  const entity = { ...ZERO };
+  const entityNumber = { ...ZERO };
+  const entityName = { ...ZERO };
+
+  for (let i = 0; i < entityKind.length; i++) {
+    const kind = entityKind[i];
+    if (kind === "none") continue;
+    entity.N++;
+    if (kind === "number") entityNumber.N++;
+    else entityName.N++;
+  }
+
+  for (const e of a.edits) {
+    if (e.op === "MATCH") continue;
+    // Insertions have no reference token and so no entity identity; counting them
+    // against a class they were never part of would inflate it arbitrarily.
+    if (e.refIndex === null) continue;
+    const kind = entityKind[e.refIndex];
+    if (kind === "none") continue;
+    const bucket = e.op === "SUB" ? "S" : "D";
+    entity[bucket]++;
+    if (kind === "number") entityNumber[bucket]++;
+    else entityName[bucket]++;
+  }
+
   return {
     counts: { S: a.S, D: a.D, I: a.I, N: a.N },
     charCounts: characterCounts(refTokens.join(" "), hypothesis.join(" ")),
@@ -121,8 +155,30 @@ export function scoreUtterance(
     englishSpansDeleted: deleted,
     englishSpansTotal: total,
     switchPointCount: countSwitchPoints(refTags),
+    entity,
+    entityNumber,
+    entityName,
     alignment: a,
   };
+}
+
+/**
+ * Classify a reference token as an entity worth scoring separately.
+ *
+ * `number` is any digit run surviving numeral folding - ages, durations, dosages,
+ * phone numbers, identifiers. `name` is a capitalised token that is not
+ * utterance-initial, which is the standard heuristic for a proper noun once case
+ * is the only signal left.
+ *
+ * The heuristic is deliberately crude and its denominators are published, so a
+ * reader can judge it. It is also script-dependent: Ge'ez has no case, so Amharic
+ * yields no `name` tokens at all and the report says so rather than reporting a
+ * zero as though it were a measurement.
+ */
+function classifyEntity(token: TaggedToken, index: number): "number" | "name" | "none" {
+  if (/^\d+$/.test(token.text)) return "number";
+  if (token.caps && index > 0 && token.text.length > 1) return "name";
+  return "none";
 }
 
 function nearestRefIndex(a: Alignment<string>, k: number): number | null {

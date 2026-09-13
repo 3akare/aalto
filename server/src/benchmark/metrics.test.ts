@@ -215,3 +215,41 @@ describe("class-conditional decomposition", () => {
     assert.ok(Number.isFinite(rate(m.counts)));
   });
 });
+
+describe("entity error rate", () => {
+  const ref = (text: string) => normalizeReference(text, { track: "A", languageCode: "en" });
+
+  it("counts digit runs as number entities", () => {
+    const m = scoreUtterance(ref("I am 28 years old"), ["i", "am", "28", "years", "old"]);
+    assert.equal(m.entityNumber.N, 1);
+    assert.equal(edits(m.entityNumber), 0);
+  });
+
+  it("charges a wrong number against the number class", () => {
+    const m = scoreUtterance(ref("I am 28 years old"), ["i", "am", "82", "years", "old"]);
+    assert.equal(m.entityNumber.N, 1);
+    assert.equal(rate(m.entityNumber), 1);
+    // ...and the overall WER barely moves, which is the entire point of the metric.
+    assert.ok(rate(m.counts) < 0.25, `overall WER should stay low, got ${rate(m.counts)}`);
+  });
+
+  it("treats a mid-sentence capitalised word as a name", () => {
+    const m = scoreUtterance(ref("my name is Ada Okafor"), ["my", "name", "is", "ada", "okafor"]);
+    assert.equal(m.entityName.N, 2);
+  });
+
+  it("does not treat the first word as a name just for being capitalised", () => {
+    const m = scoreUtterance(ref("Hello there friend"), ["hello", "there", "friend"]);
+    assert.equal(m.entityName.N, 0);
+  });
+
+  it("ignores insertions, which have no entity identity", () => {
+    const m = scoreUtterance(ref("I am 28"), ["i", "am", "28", "definitely", "yes"]);
+    assert.equal(edits(m.entityNumber), 0);
+  });
+
+  it("combines the classes into the overall entity count", () => {
+    const m = scoreUtterance(ref("Ada is 28"), ["ada", "is", "28"]);
+    assert.equal(m.entity.N, m.entityName.N + m.entityNumber.N);
+  });
+});

@@ -140,6 +140,9 @@ interface Scored {
   matrix: ErrorCounts[];
   switchNear: ErrorCounts[];
   switchFar: ErrorCounts[];
+  entity: ErrorCounts[];
+  entityNumber: ErrorCounts[];
+  entityName: ErrorCounts[];
   spansDeleted: number;
   spansTotal: number;
   latencies: number[];
@@ -223,6 +226,9 @@ async function main(): Promise<void> {
       matrix: [],
       switchNear: [],
       switchFar: [],
+      entity: [],
+      entityNumber: [],
+      entityName: [],
       spansDeleted: 0,
       spansTotal: 0,
       latencies: [],
@@ -256,6 +262,9 @@ async function main(): Promise<void> {
           s.matrix.push(m.matrix);
           s.switchNear.push(m.switchNear);
           s.switchFar.push(m.switchFar);
+          s.entity.push(m.entity);
+          s.entityNumber.push(m.entityNumber);
+          s.entityName.push(m.entityName);
           s.spansDeleted += m.englishSpansDeleted;
           s.spansTotal += m.englishSpansTotal;
         }
@@ -300,6 +309,7 @@ async function main(): Promise<void> {
     perLanguage: [],
     pairwise: [],
     rankingStability: [],
+    entity: [],
     codeSwitching: [],
     robustness: [],
   };
@@ -313,6 +323,15 @@ async function main(): Promise<void> {
 
     const ciA = bootstrapCI(coreA, coreStrata, { iterations: BOOTSTRAP_ITERATIONS });
     const ciB = bootstrapCI(coreB, coreStrata, { iterations: BOOTSTRAP_ITERATIONS });
+
+    input.entity.push({
+      providerId: p.id,
+      overall: bootstrapCI(pick(s.entity), coreStrata, { iterations: BOOTSTRAP_ITERATIONS }),
+      numbers: rate(pick(s.entityNumber).reduce(addCounts, ZERO)),
+      names: rate(pick(s.entityName).reduce(addCounts, ZERO)),
+      numberTokens: pick(s.entityNumber).reduce(addCounts, ZERO).N,
+      nameTokens: pick(s.entityName).reduce(addCounts, ZERO).N,
+    });
 
     input.headline.push({
       providerId: p.id,

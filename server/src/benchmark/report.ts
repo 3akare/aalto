@@ -50,6 +50,14 @@ export interface ReportInput {
     ties: number;
   }[];
   rankingStability: { pair: string; tau: number; orderA: string[]; orderB: string[] }[];
+  entity: {
+    providerId: string;
+    overall: Interval;
+    numbers: number;
+    names: number;
+    numberTokens: number;
+    nameTokens: number;
+  }[];
   codeSwitching: {
     providerId: string;
     werMatrix: number;
@@ -86,6 +94,64 @@ export function renderReport(r: ReportInput): string {
     "An independent replication of the AfriSwitch evaluation protocol, adding the confidence " +
       "intervals, paired significance tests, and code-switching-specific metrics that the " +
       "corpus paper does not report."
+  );
+  out.push("");
+
+  // --- At a glance -----------------------------------------------------------
+  // Decision-ready summary first, for a reader who will not get past the fold.
+  // Every row names the leader, its figure, and the next best, so a small margin
+  // is visible as a small margin rather than hidden behind a rank.
+  const n = r.providers.length;
+
+  /** Best system on a metric where lower is better, with the runner-up. */
+  const leader = (
+    label: string,
+    values: { providerId: string; value: number }[],
+    fmt: (v: number) => string
+  ) => {
+    const ranked = values.filter((v) => Number.isFinite(v.value)).sort((a, b) => a.value - b.value);
+    if (ranked.length === 0) return;
+    const [best, next] = ranked;
+    out.push(
+      `| ${label} | **${name(best.providerId)}** | ${fmt(best.value)} | 1st of ${n} | ` +
+        `${next ? `${name(next.providerId)} ${fmt(next.value)}` : "—"} |`
+    );
+  };
+
+  out.push("## At a glance");
+  out.push("");
+  out.push("| Metric | Best system | Result | Rank | Next best |");
+  out.push("| --- | --- | --- | --- | --- |");
+  leader(
+    "Corpus WER (Track A)",
+    r.headline.map((h) => ({ providerId: h.providerId, value: h.werA.point })),
+    pct
+  );
+  leader(
+    "Entity error (names + numbers)",
+    r.entity.map((e) => ({ providerId: e.providerId, value: e.overall.point })),
+    pct
+  );
+  leader(
+    "Error on embedded English",
+    r.codeSwitching.map((c) => ({ providerId: c.providerId, value: c.werEnglish })),
+    pct
+  );
+  leader(
+    "Switch penalty",
+    r.codeSwitching.map((c) => ({ providerId: c.providerId, value: c.switchPenalty })),
+    pct
+  );
+  leader(
+    "English spans dropped",
+    r.codeSwitching.map((c) => ({ providerId: c.providerId, value: c.spanDeletionRate })),
+    pct
+  );
+  out.push("");
+  out.push(
+    "> Read this table alongside T4. With a sample this size several of these " +
+      "margins are inside the confidence intervals, and a rank of 1st is not the " +
+      "same claim as a significant difference."
   );
   out.push("");
 
@@ -264,6 +330,34 @@ export function renderReport(r: ReportInput): string {
       "> **CMI slope** is the length-weighted OLS slope of per-utterance WER on the corpus's own " +
       "code-mixing index — how fast a system degrades as mixing intensifies, as distinct from " +
       "simply being worse overall."
+  );
+  out.push("");
+
+  // --- Entity accuracy -------------------------------------------------------
+  out.push("## T6a · Entity error — names and numbers");
+  out.push("");
+  out.push(
+    "A transcript can post a respectable word error rate and still be useless for " +
+      "filling in a form, because the tokens that matter — a name, an age, a phone " +
+      "number, a dosage — are a handful among hundreds of function words. Scored " +
+      "separately, they ask the question the product actually cares about."
+  );
+  out.push("");
+  out.push("| System | Entity error | Numbers | Names | Number tokens | Name tokens |");
+  out.push("| --- | --- | --- | --- | --- | --- |");
+  for (const e of [...r.entity].sort((a, b) => a.overall.point - b.overall.point)) {
+    out.push(
+      `| ${name(e.providerId)} | ${ci(e.overall)} | ${pct(e.numbers)} | ${pct(e.names)} | ${e.numberTokens} | ${e.nameTokens} |`
+    );
+  }
+  out.push("");
+  out.push(
+    "> Numbers are digit runs surviving numeral folding. Names are capitalised " +
+      "non-initial tokens — the standard heuristic once case is the only signal " +
+      "left, and a crude one, which is why the denominators are published here " +
+      "rather than only the rates. It is script-dependent: Ge'ez has no case, so " +
+      "Amharic contributes no name tokens at all and its column is an absence of " +
+      "measurement rather than a score of zero."
   );
   out.push("");
 
