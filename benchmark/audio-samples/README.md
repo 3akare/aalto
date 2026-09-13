@@ -1,27 +1,19 @@
 # Benchmark audio samples
 
-Drop `.wav` clips here, each with a matching reference transcript and (optional) metadata file:
+**This directory is generated, and its contents are never committed.**
+
+`npm run corpus -- <tier> <dataset>` from `server/` downloads the corpus, selects
+a sample and writes one triplet per utterance:
 
 ```
-sample1.wav
-sample1.txt         <- exact reference transcript, plain text
-sample1.meta.json   <- optional: { "languageCode": "yo", "description": "Yoruba-English, form field: full name" }
+<id>.wav          16 kHz mono PCM16, transcoded once so every vendor gets identical bytes
+<id>.txt          reference transcript
+<id>.meta.json    languageCode, cmi, numSwitchPoints, duration, transcriptionTagged
 ```
 
-## What to record (aim for 10-20 short clips, each 5-15 seconds)
+The audio is licensed CC BY-NC-SA 4.0 and is **not redistributed**. Only metrics,
+statistics and the sampling manifest are published. The manifest in
+`benchmark/manifest/` is what lets anyone reconstruct this exact sample from the
+original source rather than from a copy of it.
 
-Cover the actual demo scenario - civic form filling + task follow-up - so the benchmark reflects
-real usage, not generic sentences:
-
-- A few clips of natural code-switched Yoruba-English (or Pidgin-English) filling out form fields,
-  e.g. "Orukọ mi ni Ada Okafor" (my name is Ada Okafor) mixed with English phrasing
-- A few pure-English control clips of the same content, to see how much code-switching specifically
-  degrades each model vs. a language-pair baseline
-- A few Todoist-style commands ("fi mi si iranti lati mu iwe idanimọ mi wá ni Friday" / "remind me to
-  bring my ID Friday")
-- Vary background noise/pace slightly to avoid an artificially clean benchmark
-
-Keep clips under 120 seconds (Intron's sync endpoint limit) - well under, ideally, since the demo
-scenario is short spoken commands anyway.
-
-Run `npm run benchmark` from `server/` once samples are in place.
+Everything here except this file is git-ignored.

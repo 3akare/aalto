@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Aalto \u2014 Voice Browser Agent",
+  "name": "Aalto - Voice Access for Code-Switched Speech",
   "version": "0.4.0",
-  "description": "Speak to search, manage tabs, fill Google Forms, and update Todoist tasks \u2014 in code-switched language.",
+  "description": "Speak to fill forms, search, manage tabs and update Todoist, in naturally code-switched language. Built for people more fluent speaking than typing English.",
   "permissions": ["tabs", "activeTab", "scripting", "storage", "offscreen"],
   "host_permissions": ["<all_urls>"],
   "background": {

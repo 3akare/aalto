@@ -7,12 +7,12 @@ dist/
 benchmark/results/
 benchmark/cache/
 
-# AfriSwitch audio is CC-BY-NC-SA-4.0 — metrics and derived statistics may be
+# AfriSwitch audio is CC-BY-NC-SA-4.0 - metrics and derived statistics may be
 # published, the clips themselves must not be redistributed.
 benchmark/audio-samples/**
 !benchmark/audio-samples/README.md
 
-# The frozen sample manifest IS committed — it is the pre-registration record.
+# The frozen sample manifest IS committed - it is the pre-registration record.
 !benchmark/manifest/
 
 # Generated UI previews for eyeballing the popup outside Chrome
