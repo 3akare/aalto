@@ -67,6 +67,15 @@ async function press() {
     error: err.message,
   }));
 
+  if (res?.needsMic) {
+    // The background worker has opened the permission page in a tab; that tab
+    // taking focus closes this popup, so just reset and let the user come back.
+    phase = "idle";
+    micBtn.textContent = "Hold to talk";
+    statusEl.textContent = PHASE_TEXT.needs_mic;
+    return;
+  }
+
   if (!res?.ok) {
     phase = "idle";
     micBtn.textContent = "Hold to talk";
@@ -137,6 +146,7 @@ micBtn.addEventListener("keyup", (e) => {
 
 const PHASE_TEXT = {
   idle: "Ready.",
+  needs_mic: "Microphone not enabled — finish the setup in the tab that just opened.",
   recording: "Listening…",
   thinking: "Transcribing and planning…",
   working: "Working…",

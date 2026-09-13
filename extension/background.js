@@ -32,7 +32,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   switch (message.type) {
     case "START_RECORDING":
       beginRecording()
-        .then(() => sendResponse({ ok: true }))
+        .then((outcome) => sendResponse({ ok: true, ...outcome }))
         .catch((err) => {
           setState({ phase: "error", error: err.message });
           sendResponse({ ok: false, error: err.message });
@@ -94,15 +94,54 @@ async function ensureOffscreen() {
 async function sendToOffscreen(message) {
   await ensureOffscreen();
   const res = await chrome.runtime.sendMessage({ ...message, target: "offscreen" });
-  if (!res?.ok) throw new Error(res?.error ?? "offscreen worker did not respond");
+  if (!res?.ok) {
+    const err = new Error(res?.error ?? "offscreen worker did not respond");
+    err.name = res?.name ?? "Error";
+    throw err;
+  }
   return res;
+}
+
+/** True for the one failure the user can actually fix, via the permission page. */
+function isPermissionProblem(err) {
+  return (
+    err?.name === "NotAllowedError" ||
+    err?.name === "SecurityError" ||
+    /permission|denied|not ?allowed/i.test(err?.message ?? "")
+  );
+}
+
+async function openPermissionPage() {
+  const url = chrome.runtime.getURL("permission.html");
+  const [existing] = await chrome.tabs.query({ url });
+  if (existing?.id) {
+    await chrome.tabs.update(existing.id, { active: true });
+    return;
+  }
+  await chrome.tabs.create({ url });
 }
 
 // --- the command flow -------------------------------------------------------
 
 async function beginRecording() {
   await setState({ phase: "recording", transcript: "", summary: "", tasks: [], error: "" });
-  await sendToOffscreen({ type: "START_RECORDING" });
+  try {
+    await sendToOffscreen({ type: "START_RECORDING" });
+  } catch (err) {
+    if (isPermissionProblem(err)) {
+      // An offscreen document can use the microphone but cannot prompt for it,
+      // so send the user to a real page that can.
+      await chrome.storage.local.set({ micGranted: false });
+      await setState({
+        phase: "needs_mic",
+        error: "Aalto needs permission to use your microphone.",
+      });
+      await openPermissionPage();
+      return { needsMic: true };
+    }
+    throw err;
+  }
+  return { started: true };
 }
 
 async function finishRecording() {

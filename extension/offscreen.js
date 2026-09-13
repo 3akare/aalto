@@ -19,7 +19,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     case "START_RECORDING":
       startRecording()
         .then(() => sendResponse({ ok: true }))
-        .catch((err) => sendResponse({ ok: false, error: err.message }));
+        // The name matters: the background worker uses NotAllowedError to decide
+        // whether to open the permission page, and err.message alone is vague.
+        .catch((err) => sendResponse({ ok: false, error: err.message, name: err.name }));
       return true; // async response
 
     case "STOP_RECORDING":
