@@ -7,6 +7,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse({ ok: true, labels: listQuestionLabels() });
     return false;
   }
+  if (message.type === "READ_FIELDS") {
+    sendResponse({ ok: true, fields: readFields() });
+    return false;
+  }
   if (message.type !== "FORM_ACTION") return false;
 
   try {

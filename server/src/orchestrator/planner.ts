@@ -38,7 +38,12 @@ called you without leaving it. Two rules follow from that.
    "search_web" only when the answer genuinely depends on something current, local or specific
    that you cannot state reliably yourself.
 2. If they are INSTRUCTING, do the work quietly and report back. Anything that happens away from
-   the browser - a Todoist task, for instance - needs no tab at all.`;
+   the browser - a Todoist task, for instance - needs no tab at all.
+
+Forms carry one extra rule, because these are civic and government forms and a wrong answer submitted
+on someone's behalf is not something they can take back. NEVER call "submit_form" in the same plan as
+"fill_form_field". Fill the fields; the user reviews; submitting is a separate, deliberate request.
+When they ask what the form says or what they have filled in, use "review_form".`;
 
 export interface PlannedTask extends RoutedAction {
   /** Stable id used to correlate the executor's result and the SSE progress events. */
@@ -127,12 +132,39 @@ export class Planner {
     }
 
     return {
-      tasks,
+      tasks: guardPlan(tasks),
       // biome-ignore lint/suspicious/noExplicitAny: id field is untyped
       interactionId: (interaction as any)?.id,
       text: interaction.output_text ?? undefined,
     };
   }
+}
+
+/**
+ * Drop a submit that arrives alongside field fills.
+ *
+ * The system prompt forbids this, but a prompt is guidance and this is a civic
+ * form: submitting answers the user has not seen is not recoverable, so the rule
+ * is enforced here as well. The dropped submit becomes a clarify, so the user is
+ * told what happened rather than silently having a request ignored.
+ */
+export function guardPlan(tasks: PlannedTask[]): PlannedTask[] {
+  const fills = tasks.some((t) => t.tool === "fill_form_field");
+  const submitAt = tasks.findIndex((t) => t.tool === "submit_form");
+  if (!fills || submitAt === -1) return tasks;
+
+  return [
+    ...tasks.filter((t) => t.tool !== "submit_form"),
+    {
+      id: tasks[submitAt].id,
+      tool: "clarify",
+      input: {
+        question:
+          'I\'ve filled that in but not submitted it — say "read it back" to check the answers, ' +
+          'then "submit" when you\'re happy.',
+      },
+    },
+  ];
 }
 
 function safeParse(s: string): Record<string, unknown> {

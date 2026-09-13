@@ -146,7 +146,10 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-function safeParseContext(raw: unknown): { openTabs?: { title: string; url: string }[] } {
+function safeParseContext(raw: unknown): {
+  openTabs?: { title: string; url: string }[];
+  formLabels?: string[];
+} {
   if (typeof raw !== "string" || !raw) return {};
   try {
     const parsed = JSON.parse(raw);

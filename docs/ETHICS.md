@@ -104,8 +104,17 @@ not aspiration:
   to the form script, because a form that quietly misreports someone's circumstances to a government
   body is a worse outcome than a form that does not get filled.
 
-**Submission stays a deliberate act.** Filling fields and submitting a form are separate tools. Aalto
-never submits a form as a side effect of filling it.
+**Submission stays a deliberate act, enforced in code.** Filling fields and submitting are separate
+tools, and a plan that contains both has the submit stripped out before anything runs — replaced by a
+prompt to review first. The system prompt forbids the combination too, but a prompt is guidance;
+submitting answers a user has not seen to a government body is not recoverable, so the rule is also a
+function with tests around it.
+
+**The form can be read back before submitting.** "Read back what I've filled in" returns every
+question with its current value, spoken — "still blank" included, because a missed field is exactly
+what someone checking by ear needs to catch. Asking "what is this form asking me?" reads the
+questions themselves, which is the part that matters for someone facing an English-only government
+form they cannot comfortably read.
 
 **A choice of modality, not a replacement for agency.** The point is that someone can speak instead of
 typing if that is easier — not that a machine completes civic paperwork on their behalf while they
@@ -122,7 +131,6 @@ aloud that the user did not ask to hear.
 Stated plainly, because a hackathon prototype claiming civic readiness would itself be an ethics
 problem:
 
-- A review step showing every filled field before submission, with per-field correction by voice.
 - Transcription under contract with one provider, with data residency and retention terms
   appropriate to government intake — not three vendors under their public terms.
 - Accuracy measured on the specific forms and the specific population, not only on a research corpus.

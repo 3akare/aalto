@@ -209,7 +209,16 @@ async function runCommand(audioBase64) {
     const form = new FormData();
     form.append("audio", base64ToBlob(audioBase64, "audio/webm"), "command.webm");
     if (settings.langHint) form.append("languageCode", settings.langHint);
-    form.append("context", JSON.stringify({ openTabs: await openTabSummary() }));
+    // The planner is far more accurate when it can see the form's real questions
+    // than when it has to invent a field name and hope the fuzzy matcher rescues
+    // it — and it is what lets "what is this form asking me?" be answerable.
+    form.append(
+      "context",
+      JSON.stringify({
+        openTabs: await openTabSummary(),
+        formLabels: await activeFormLabels(),
+      })
+    );
 
     const res = await fetch(`${serverUrl}/api/voice-command`, {
       method: "POST",
@@ -273,8 +282,12 @@ async function executeBrowserTasks(tasks) {
   const runOne = async (task) => {
     try {
       const detail = await executeAction(task);
-      await markTask(task.id, "ok", detail);
-      return { id: task.id, tool: task.tool, status: "ok", detail };
+      // A read-back IS the reply, not a status line about one. Marking it
+      // "answered" makes the summariser speak it verbatim instead of collapsing
+      // it into "I reviewed the form" and throwing away the only useful part.
+      const status = task.tool === "review_form" ? "answered" : "ok";
+      await markTask(task.id, status, detail);
+      return { id: task.id, tool: task.tool, status, detail };
     } catch (err) {
       await markTask(task.id, "failed", err.message);
       return { id: task.id, tool: task.tool, status: "failed", detail: err.message };
@@ -330,6 +343,9 @@ async function executeAction(action) {
     case "submit_form":
       return await sendToActiveTab(action);
 
+    case "review_form":
+      return await reviewForm();
+
     default:
       throw new Error(`don't know how to ${action.tool}`);
   }
@@ -348,6 +364,42 @@ async function sendToActiveTab(action) {
   }
   if (!res?.ok) throw new Error(res?.error ?? "the form field didn't match anything");
   return res.detail;
+}
+
+/** Questions on the form in the active tab, or [] when there is no form there. */
+async function activeFormLabels() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return [];
+    const res = await chrome.tabs.sendMessage(tab.id, { type: "LIST_FIELDS" });
+    return res?.labels ?? [];
+  } catch {
+    // No content script on this page — not a form, and not an error.
+    return [];
+  }
+}
+
+/**
+ * Read the form back, question by question, with whatever is currently entered.
+ *
+ * Phrased for speech rather than for a screen: someone filling a government form
+ * by voice is checking it by ear, and "blank" is more useful to hear than silence.
+ */
+async function reviewForm() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) throw new Error("no active tab to read");
+
+  let res;
+  try {
+    res = await chrome.tabs.sendMessage(tab.id, { type: "READ_FIELDS" });
+  } catch {
+    throw new Error("that page doesn't look like a form I can read");
+  }
+  const fields = res?.fields ?? [];
+  if (fields.length === 0) throw new Error("I couldn't find any questions on this page");
+
+  const spoken = fields.map((f) => `${f.label}: ${f.value || "still blank"}`).join(". ");
+  return `here's what the form says. ${spoken}`;
 }
 
 function normalizeUrl(url) {

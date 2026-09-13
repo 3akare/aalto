@@ -49,6 +49,13 @@ thrown into a search results page because they asked what a term meant. So Aalto
 - **Works in the background.** Tabs it opens are opened *behind* what you are doing. Todoist tasks
   need no tab at all. You get "added, and opened the portal in a background tab", not a context switch.
 - **Fills Google Forms by voice**, matching what you said to the form's actual visible question text.
+  One sentence can fill several fields, and spoken digits land as digits — *"my phone is zero eight
+  zero three four five six seven eight nine zero"* becomes `08034567890`, which matters because civic
+  forms are mostly phone numbers, NINs and dates.
+- **Reads the form back.** "What is this form asking me?" reads the questions; "read back what I've
+  filled in" reads every question with its current value, blanks included. For someone facing an
+  English-only government form they cannot comfortably read, this is the part that actually opens the
+  door.
 - **Manages Todoist** — add, complete, update — matched fuzzily from a spoken description.
 
 It speaks its reply back through Intron TTS, and there is a mute toggle for when you want the answer
@@ -67,6 +74,11 @@ worked and an honest account of the third.
 
 **The summary describes what happened, not what was dispatched.** The extension posts real per-task
 outcomes back to the server, which produces one spoken sentence from them. A task that failed says so.
+
+**It refuses to submit what you have not seen.** A plan containing both field fills and a submit has
+the submit removed before anything executes, and the user is told to review first. This is enforced
+as a function with tests, not only as a line in the system prompt — a civic form submitted with wrong
+answers is not something the applicant can take back.
 
 **It asks rather than guesses, where guessing is unrecoverable.** An ambiguous Todoist match ("the ID
 card thing" matching two open tasks) returns a clarifying question instead of closing one. A radio

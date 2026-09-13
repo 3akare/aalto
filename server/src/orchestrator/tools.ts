@@ -50,8 +50,19 @@ export const AALTO_TOOLS = [
     },
   },
   {
+    name: "review_form",
+    description:
+      "Read back every question on the open form together with what is currently entered against " +
+      "it, so the user can check their answers before submitting. Use this whenever they ask what " +
+      "the form says, what they have filled in, or to check something over.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
     name: "submit_form",
-    description: "Submit the currently open form.",
+    description:
+      "Submit the currently open form. Only ever use this when the user explicitly asks to " +
+      "submit. Never add it to a plan that also fills fields in - they have not seen what was " +
+      "entered yet.",
     input_schema: { type: "object" as const, properties: {} },
   },
   {
