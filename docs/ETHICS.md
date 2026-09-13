@@ -16,11 +16,15 @@ Concretely:
   statistics and the sampling manifest; we do not publish the clips, and the manifest is committed
   precisely so a reader can reproduce our sample from the original source rather than from a copy of
   it we handed them.
-- **Evaluation data is not sent to endpoints that train on it.** Google AI Studio's free tier may use
-  submitted data for model training. Pushing an evaluation-only corpus through a training-enabled
-  endpoint would both strain the non-commercial licence and contaminate the benchmark for everyone
-  downstream who uses it afterwards. Paid, no-train endpoints are used for every vendor, and the
-  retention setting used for each is recorded in the benchmark report's provenance table.
+- **Evaluation data should not be sent to endpoints that train on it — and we fell short of this.**
+  Google AI Studio's free tier may use submitted data for model training. Pushing an evaluation-only
+  corpus through a training-enabled endpoint both strains the non-commercial licence and risks
+  contaminating the benchmark for everyone downstream. Intron and AssemblyAI requests in our run went
+  through paid accounts. **Google requests did not: they used a free-tier key, so that audio may have
+  been retained for training.** We are recording this as a shortfall against our own standard rather
+  than describing the intention as though it had been met. The retention setting actually used for
+  each vendor is recorded in the benchmark report's provenance table, and a rerun on a billed Google
+  key is the fix.
 
 The one place consented recording would arise is the demo video, which uses our own voice.
 
@@ -84,6 +88,14 @@ those conventions by construction, independently of whether it misheard anything
 that. We test it, by scoring under three normalisation regimes of increasing severity and reporting
 whether the ranking survives. The benchmark report states this, and states the two related risks we
 *cannot* address, before it shows any result.
+
+**A refusal worth reporting.** Evaluating a generalist multimodal model on medical code-switched
+speech surfaced something a WER table would never show: it declined to transcribe the audio at all,
+returning safety-filter refusals on recordings of patients describing their own symptoms. That is a
+real limitation of repurposing general-purpose models for clinical speech, and it is reported in the
+benchmark's failure table rather than quietly dropped. A system that returns no transcript cannot be
+scored on word error rate, so it is excluded from the accuracy comparison and named, with its reasons,
+in the robustness section.
 
 **Known limitations, stated up front.** Numeral normalisation is applied to English number words
 only — Yoruba's vigesimal system is out of scope, which is symmetric across systems but leaves

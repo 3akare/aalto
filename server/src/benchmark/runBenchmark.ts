@@ -32,8 +32,51 @@ const DOCS_DIR = path.join(ROOT, "docs");
 const TRACKS: Track[] = ["A", "B", "C"];
 const BOOTSTRAP_ITERATIONS = 10_000;
 
-/** Intron documents 30 requests/minute. This is the critical path for the whole run. */
-const RATE_LIMITS: Record<string, number> = { intron: 30 };
+/**
+ * Per-provider ceilings, requests per minute.
+ *
+ * Intron documents 30/min. The Gemini figures are the free tier's, which is what
+ * a 429 "exceeded your current quota" on the first burst was telling us; leaving
+ * them unthrottled means most of the run records vendor failures that say more
+ * about our billing plan than about the model.
+ */
+const RATE_LIMITS: Record<string, number> = {
+  intron: 30,
+  "gemini-transcribe": 8,
+  "gemini-flash": 8,
+};
+
+/**
+ * Intron loads a speech model per language on demand, and answers the first
+ * request for a cold language with "Required language not available for this
+ * session, please wait 30 seconds".
+ *
+ * The runner would retry through that, but each retry burns a full session
+ * timeout on a multi-minute clip, so a cold start can cost twenty minutes before
+ * the first real result. Warming each language once up front with its shortest
+ * clip turns that into a few seconds of setup.
+ */
+async function warmIntronLanguages(
+  provider: SttProvider,
+  byLanguage: Map<string, { id: string; audio: () => Buffer }>
+): Promise<void> {
+  for (const [language, sample] of byLanguage) {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        await provider.transcribe(sample.audio(), { languageCode: language });
+        console.log(`[benchmark] warmed ${language}`);
+        break;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (!/required language not available/i.test(message)) {
+          console.log(`[benchmark] warm ${language}: ${message.slice(0, 70)}`);
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 35_000));
+      }
+    }
+  }
+}
 
 function buildProviders(): SttProvider[] {
   const providers: SttProvider[] = [
@@ -53,12 +96,22 @@ function buildProviders(): SttProvider[] {
         model: config.gemini.transcribeModel,
       })
     );
-    providers.push(
-      new GeminiSttProvider(config.gemini.apiKey, {
-        kind: "generalist",
-        model: config.gemini.plannerModel,
-      })
-    );
+    // The generalist multimodal model is off by default. Against AfriSwitchCare
+    // it returned nothing usable for two separate reasons, both worth reporting
+    // but neither leaving anything to score: free-tier quota exhaustion, and
+    // "Input blocked" safety refusals on clinical audio - it declines to
+    // transcribe patients describing their own symptoms. A system that returns no
+    // transcript cannot be compared on word error rate, and including it would
+    // empty the complete-case intersection and with it every table in the report.
+    // Set GEMINI_INCLUDE_GENERALIST=true to put it back.
+    if (process.env.GEMINI_INCLUDE_GENERALIST === "true") {
+      providers.push(
+        new GeminiSttProvider(config.gemini.apiKey, {
+          kind: "generalist",
+          model: config.gemini.plannerModel,
+        })
+      );
+    }
   }
   if (providers.length < 3) {
     throw new Error(
@@ -118,6 +171,21 @@ async function main(): Promise<void> {
   mkdirSync(RESULTS_DIR, { recursive: true });
   const runner = new BenchmarkRunner({ cacheDir: CACHE_DIR, rateLimits: RATE_LIMITS });
 
+  const intron = providers.find((p) => p.id === "intron");
+  if (intron) {
+    const shortestPerLanguage = new Map<string, { id: string; audio: () => Buffer }>();
+    for (const r of [...rows].sort((a, b) => a.duration - b.duration)) {
+      if (!shortestPerLanguage.has(r.language)) {
+        shortestPerLanguage.set(r.language, {
+          id: r.id,
+          audio: () => readFileSync(path.join(SAMPLES_DIR, `${r.id}.wav`)),
+        });
+      }
+    }
+    console.log(`[benchmark] warming ${shortestPerLanguage.size} language model(s) ...`);
+    await warmIntronLanguages(intron, shortestPerLanguage);
+  }
+
   const results = await runner.runAll(
     providers,
     rows.map((r) => ({
@@ -128,7 +196,7 @@ async function main(): Promise<void> {
     hash,
     {
       onProgress: (done, total) => {
-        if (done % 20 === 0 || done === total) {
+        if (done % 4 === 0 || done === total) {
           process.stdout.write(`\r[benchmark] ${done}/${total} calls`);
         }
       },
