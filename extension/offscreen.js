@@ -11,7 +11,7 @@
  */
 
 const SILENCE_RMS = 0.012; // below this counts as room tone rather than speech
-const SILENCE_HOLD_MS = 1100; // quiet for this long after speech -> commit
+const SILENCE_HOLD_MS = 800; // quiet for this long after speech -> commit
 const LEAD_IN_GRACE_MS = 4000; // wait at least this long for someone to start
 const MAX_UTTERANCE_MS = 25_000; // hard stop; Intron's session cap is far higher
 const LEVEL_INTERVAL_MS = 60; // waveform refresh sent to the popup

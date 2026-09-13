@@ -284,17 +284,37 @@ async function runCommand(audioBase64) {
     const done = await fetch(`${serverUrl}/api/complete`, {
       method: "POST",
       headers: { ...headers, "content-type": "application/json" },
-      body: JSON.stringify({ results: allResults, muted: settings.muted === true }),
+      body: JSON.stringify({ results: allResults }),
     });
     if (!done.ok) throw new Error(await describeHttpError(done));
-    const { summary, audioUrl } = await done.json();
+    const { summary } = await done.json();
 
+    // Show the answer the moment it exists. Speech is fetched afterwards, so the
+    // two seconds TTS takes are spent with the reply already on screen instead of
+    // behind a spinner.
     await setState({ phase: "done", summary });
-    if (audioUrl && settings.muted !== true) {
-      await sendToOffscreen({ type: "PLAY_AUDIO", url: audioUrl }).catch(() => {});
+
+    if (settings.muted !== true) {
+      speak(serverUrl, headers, summary).catch(() => {});
     }
   } catch (err) {
     await setState({ phase: "error", error: err.message });
+  }
+}
+
+/** Fetch and play the spoken reply. Never blocks the visible result. */
+async function speak(serverUrl, headers, text) {
+  const res = await fetch(`${serverUrl}/api/speak`, {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) return;
+  const { audioUrl } = await res.json();
+  // Muting mid-flight should win over a request made before it.
+  const { muted } = await chrome.storage.local.get("muted");
+  if (audioUrl && muted !== true) {
+    await sendToOffscreen({ type: "PLAY_AUDIO", url: audioUrl }).catch(() => {});
   }
 }
 

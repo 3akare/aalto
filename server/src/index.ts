@@ -119,16 +119,32 @@ app.post("/api/voice-command", requireApiKey, upload.single("audio"), async (req
 app.post("/api/complete", requireApiKey, async (req, res) => {
   try {
     const results = (req.body.results ?? []) as TaskResult[];
-    const muted = req.body.muted === true;
 
+    // Text only. Generating speech first meant the user stared at a spinner for
+    // the two seconds TTS takes, even though the answer was already known. The
+    // caller renders this immediately and asks for audio separately.
     const summary = await summariser.summarise(results);
-    const audioUrl = muted ? undefined : await speak(summary).catch(() => undefined);
-
-    res.json({ summary, audioUrl });
+    res.json({ summary });
   } catch (err) {
     const message = err instanceof Error ? err.message : "internal error";
     console.error("[complete]", message);
     res.status(500).json({ error: message });
+  }
+});
+
+/** Speech for an already-delivered summary, fetched in parallel with rendering it. */
+app.post("/api/speak", requireApiKey, async (req, res) => {
+  try {
+    const text = String(req.body.text ?? "").trim();
+    if (!text) {
+      res.status(400).json({ error: "missing 'text'" });
+      return;
+    }
+    res.json({ audioUrl: await speak(text) });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "internal error";
+    console.error("[speak]", message);
+    res.status(502).json({ error: message });
   }
 });
 
