@@ -22,7 +22,6 @@ grantBtn.addEventListener("click", async () => {
     // holding the microphone open.
     for (const track of stream.getTracks()) track.stop();
 
-    await chrome.storage.local.set({ micGranted: true });
     statusEl.className = "ok";
     statusEl.textContent = "Microphone enabled. You can close this tab and use Aalto.";
     grantBtn.textContent = "Done";

@@ -62,13 +62,3 @@ export function assertServerConfig(): void {
     );
   }
 }
-
-/** Used by the benchmark scripts, which need only a named subset. */
-export function assertPresent(vars: Record<string, string>): void {
-  const absent = Object.entries(vars)
-    .filter(([, v]) => !v)
-    .map(([k]) => k);
-  if (absent.length > 0) {
-    throw new Error(`Missing required environment variables: ${absent.join(", ")}`);
-  }
-}

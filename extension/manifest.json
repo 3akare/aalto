@@ -15,8 +15,7 @@
   "commands": {
     "_execute_action": {
       "suggested_key": {
-        "default": "Ctrl+Shift+A",
-        "mac": "Command+Shift+A"
+        "default": "Alt+A"
       },
       "description": "Open Aalto and start listening"
     }

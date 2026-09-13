@@ -184,17 +184,6 @@ export function characterCounts(reference: string, hypothesis: string): ErrorCou
   return { S: a.S, D: a.D, I: a.I, N: a.N };
 }
 
-/** Convenience wrapper: plain word error rate between two token lists. */
-export function wordErrorRate(reference: readonly string[], hypothesis: readonly string[]): number {
-  const a = align(reference, hypothesis);
-  return rate({ S: a.S, D: a.D, I: a.I, N: a.N });
-}
-
-/** Convenience wrapper: plain character error rate. */
-export function characterErrorRate(reference: string, hypothesis: string): number {
-  return rate(characterCounts(reference, hypothesis));
-}
-
 /**
  * Code-Mixing Index, per Gambäck & Das and as used by the AfriSwitch paper:
  *

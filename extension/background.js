@@ -172,7 +172,6 @@ async function beginRecording() {
     if (isPermissionProblem(err)) {
       // An offscreen document can use the microphone but cannot prompt for it,
       // so send the user to a real page that can.
-      await chrome.storage.local.set({ micGranted: false });
       await setState({
         phase: "needs_mic",
         error: "Aalto needs permission to use your microphone.",

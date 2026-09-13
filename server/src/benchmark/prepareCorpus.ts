@@ -5,6 +5,7 @@ import { downloadFile, listFiles } from "@huggingface/hub";
 import { parquetReadObjects } from "hyparquet";
 import { toWav16kMono, wavDurationSeconds } from "../audio/transcode";
 import { config } from "../config";
+import { codeMixingIndex } from "./metrics";
 import { isWellFormedTagged, parseTaggedTranscription } from "./normalize";
 
 /**
@@ -347,23 +348,39 @@ async function main(): Promise<void> {
     "utf8"
   );
 
-  const switchPointCheck = selected
-    .filter((r) => r.transcriptionTagged)
-    .map((r) => {
-      const tags = parseTaggedTranscription(r.transcriptionTagged).map((t) => t.tag);
-      let n = 0;
-      for (let i = 1; i < tags.length; i++) if (tags[i] !== tags[i - 1]) n++;
-      return { expected: r.numSwitchPoints, got: n };
-    });
+  // Validate the corpus's own metadata against the tags rather than trusting it:
+  // if our parse of transcription_tagged disagrees with the published
+  // num_switch_points or cmi columns, one of the two is wrong and every
+  // code-switching metric downstream is built on sand.
+  const tagged = selected.filter((r) => r.transcriptionTagged);
+  const switchPointCheck = tagged.map((r) => {
+    const tags = parseTaggedTranscription(r.transcriptionTagged).map((t) => t.tag);
+    let n = 0;
+    for (let i = 1; i < tags.length; i++) if (tags[i] !== tags[i - 1]) n++;
+    return { expected: r.numSwitchPoints, got: n };
+  });
   const mismatches = switchPointCheck.filter((c) => c.expected !== c.got).length;
+
+  const cmiDeviations = tagged.map((r) =>
+    Math.abs(
+      codeMixingIndex(parseTaggedTranscription(r.transcriptionTagged).map((t) => t.tag)) - r.cmi
+    )
+  );
+  const maxCmiDeviation = cmiDeviations.length > 0 ? Math.max(...cmiDeviations) : 0;
+  const meanCmiDeviation =
+    cmiDeviations.length > 0 ? cmiDeviations.reduce((a, b) => a + b, 0) / cmiDeviations.length : 0;
 
   console.log(`\n[corpus] wrote ${extracted} clips to ${SAMPLES_DIR}`);
   console.log(`[corpus] manifest: ${manifestPath}`);
   console.log(`[corpus] exclusions: ${JSON.stringify(exclusions)}`);
   console.log(
-    `[corpus] switch-point cross-check against corpus metadata: ` +
-      `${switchPointCheck.length - mismatches}/${switchPointCheck.length} agree` +
+    `[corpus] switch-point cross-check: ` +
+      `${switchPointCheck.length - mismatches}/${switchPointCheck.length} agree with num_switch_points` +
       (mismatches > 0 ? `  <-- investigate the tag parser before trusting the CS metrics` : "")
+  );
+  console.log(
+    `[corpus] CMI cross-check: mean |delta| ${meanCmiDeviation.toFixed(2)}, ` +
+      `max ${maxCmiDeviation.toFixed(2)} (recomputed from tags vs the published cmi column)`
   );
   console.log(`\nCommit the manifest BEFORE running the benchmark - that is the pre-registration.`);
 }

@@ -48,23 +48,3 @@ export interface SttProvider {
    */
   transcribe(audio: Buffer, opts?: TranscribeOptions): Promise<TranscriptionResult>;
 }
-
-/** The 14 AfriSwitch languages, each code-switching with English. */
-export const AFRISWITCH_LANGUAGES = [
-  "af",
-  "am",
-  "fr",
-  "ha",
-  "ig",
-  "lg",
-  "om",
-  "pcm",
-  "rw",
-  "sn",
-  "sw",
-  "tn",
-  "yo",
-  "zu",
-] as const;
-
-export type AfriswitchLanguage = (typeof AFRISWITCH_LANGUAGES)[number];
