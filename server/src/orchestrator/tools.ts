@@ -155,8 +155,8 @@ export interface RoutedAction {
  * The same tools in Gemini's Interactions API shape.
  *
  * Gemini takes a flat `{type, name, description, parameters}` per function, where
- * the Anthropic shape nests the schema under `input_schema`. Keeping one source of
- * truth and converting here avoids the two lists drifting apart.
+ * the schema above nests it under `input_schema`. Keeping one source of truth and
+ * converting here avoids the two lists drifting apart.
  */
 export const GEMINI_TOOLS = AALTO_TOOLS.map((t) => ({
   type: "function" as const,
