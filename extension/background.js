@@ -9,6 +9,7 @@
 
 const OFFSCREEN_PATH = "offscreen.html";
 const DEFAULT_SERVER = "http://localhost:8787";
+const SHORTCUT_COMMAND = "start-listening";
 
 /** Mirrored into chrome.storage.local so a re-opened popup can pick up mid-flight. */
 const state = {
@@ -95,12 +96,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 // next manual open.
 let summonedByShortcut = false;
 
-chrome.commands?.onCommand.addListener((command) => {
-  if (command !== "_execute_action") return;
+chrome.commands?.onCommand.addListener(async (command) => {
+  if (command !== SHORTCUT_COMMAND) return;
   summonedByShortcut = true;
-  chrome.action.openPopup().catch(() => {
+  try {
+    // Deliberately NOT the reserved _execute_action: Chrome handles that one
+    // natively and never dispatches onCommand, so the worker could not tell a
+    // shortcut press from a toolbar click and the popup always waited for the
+    // button. A named command dispatches, and opens the popup itself.
+    await chrome.action.openPopup();
+  } catch (err) {
+    // openPopup needs Chrome 127+. Without it the shortcut cannot open the
+    // window at all, so clear the flag rather than leaving it armed to
+    // auto-record the next time the popup is opened by hand.
     summonedByShortcut = false;
-  });
+    console.warn("[Aalto] could not open the popup from the shortcut:", err);
+  }
 });
 
 // --- offscreen document lifecycle ------------------------------------------

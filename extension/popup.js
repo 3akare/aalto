@@ -77,7 +77,7 @@ shortcutLink.addEventListener("click", () => {
 });
 
 chrome.commands?.getAll((commands) => {
-  const bound = commands?.find((c) => c.name === "_execute_action");
+  const bound = commands?.find((c) => c.name === "start-listening");
   if (bound?.shortcut) shortcutHint.textContent = bound.shortcut;
   // Unbound usually means it collided with one of Chrome's own shortcuts.
   else recordHint.hidden = true;

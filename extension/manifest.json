@@ -13,7 +13,7 @@
     "default_title": "Aalto"
   },
   "commands": {
-    "_execute_action": {
+    "start-listening": {
       "suggested_key": {
         "default": "Alt+A"
       },
