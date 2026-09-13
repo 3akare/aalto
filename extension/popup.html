@@ -215,9 +215,8 @@
 
       /* Beats the display:grid / display:block set on .record, #wave and the
          reply card, which would otherwise keep them visible when hidden. */
-      /* biome-ignore lint/complexity/noImportantStyles: must outrank the layout rules above */
-      [hidden] {
-        display: none !important;
+      [hidden][hidden] {
+        display: none;
       }
 
       /* --- reply -------------------------------------------------------- */

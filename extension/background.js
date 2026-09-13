@@ -41,24 +41,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return true;
 
     case "STOP_RECORDING":
-      finishRecording()
+      sendToOffscreen({ type: "STOP_STREAM" })
         .then(() => sendResponse({ ok: true }))
-        .catch((err) => {
-          setState({ phase: "error", error: err.message });
-          sendResponse({ ok: false, error: err.message });
-        });
+        .catch((err) => sendResponse({ ok: false, error: err.message }));
       return true;
 
-    // The offscreen worker heard the speaker stop. Ending on silence rather than
-    // on a button release is what makes the whole interaction "shortcut, talk, done".
-    case "AUTO_STOP":
-      if (state.phase === "recording") {
-        if (message.heardVoice) {
-          finishRecording().catch((err) => setState({ phase: "error", error: err.message }));
-        } else {
-          cancelRecording("I didn't hear anything.").catch(() => {});
-        }
-      }
+    // The offscreen document relays everything the server says; it owns the
+    // socket because it owns the microphone, but the state machine lives here.
+    case "STREAM_EVENT":
+      onStreamEvent(message.event).catch((err) => setState({ phase: "error", error: err.message }));
       return false;
 
     case "CANCEL_RECORDING":
@@ -194,10 +185,26 @@ async function openPermissionPage() {
 
 // --- the command flow -------------------------------------------------------
 
+/** Abandon a stream without sending it anywhere. */
+async function cancelRecording(message) {
+  await sendToOffscreen({ type: "ABORT_STREAM" }).catch(() => {});
+  await setState({ phase: "idle", summary: message ?? "", tasks: [], transcript: "" });
+}
+
 async function beginRecording() {
+  const settings = await chrome.storage.local.get(["serverUrl", "langHint", "apiKey"]);
   await setState({ phase: "recording", transcript: "", summary: "", tasks: [], error: "" });
+
   try {
-    await sendToOffscreen({ type: "START_RECORDING" });
+    await sendToOffscreen({
+      type: "START_STREAM",
+      config: {
+        serverUrl: (settings.serverUrl || DEFAULT_SERVER).replace(/\/$/, ""),
+        languageCode: settings.langHint || undefined,
+        apiKey: settings.apiKey || undefined,
+        context: { openTabs: await openTabSummary(), formLabels: await activeFormLabels() },
+      },
+    });
   } catch (err) {
     if (isPermissionProblem(err)) {
       // An offscreen document can use the microphone but cannot prompt for it,
@@ -214,58 +221,57 @@ async function beginRecording() {
   return { started: true };
 }
 
-/** Abandon a recording without sending it anywhere. */
-async function cancelRecording(message) {
-  try {
-    await sendToOffscreen({ type: "STOP_RECORDING" });
-  } catch {
-    // Nothing was recording; the state reset below is all that matters.
+/**
+ * React to the server's side of the stream.
+ *
+ * Partials are rendered as they arrive. They are throwaway text — the committed
+ * transcript replaces them — but showing words appearing changes how long the
+ * wait feels even when it is exactly the same wait.
+ */
+async function onStreamEvent(event) {
+  switch (event?.type) {
+    case "open":
+      return;
+
+    case "partial":
+      if (state.phase === "recording") await setState({ transcript: event.text ?? "" });
+      return;
+
+    case "transcript":
+      await setState({ phase: "thinking", transcript: event.text ?? "" });
+      return;
+
+    case "empty":
+      await setState({ phase: "done", summary: "I didn't hear anything.", transcript: "" });
+      return;
+
+    case "notice":
+      console.warn("[Aalto]", event.message);
+      return;
+
+    case "error":
+      await setState({ phase: "error", error: event.message ?? "the stream failed" });
+      return;
+
+    case "plan":
+      await runPlan(event);
+      return;
+
+    default:
+      return;
   }
-  await setState({ phase: "idle", summary: message ?? "", tasks: [], transcript: "" });
 }
 
-async function finishRecording() {
-  const { audioBase64 } = await sendToOffscreen({ type: "STOP_RECORDING" });
-  await setState({ phase: "thinking" });
-  await runCommand(audioBase64);
-}
-
-async function runCommand(audioBase64) {
-  const settings = await chrome.storage.local.get(["serverUrl", "langHint", "muted", "apiKey"]);
+/** Execute the browser half of a plan, then collect the spoken summary. */
+async function runPlan(plan) {
+  const settings = await chrome.storage.local.get(["serverUrl", "muted", "apiKey"]);
   const serverUrl = (settings.serverUrl || DEFAULT_SERVER).replace(/\/$/, "");
   const headers = settings.apiKey ? { "x-aalto-key": settings.apiKey } : {};
 
   try {
-    const form = new FormData();
-    form.append("audio", base64ToBlob(audioBase64, "audio/webm"), "command.webm");
-    if (settings.langHint) form.append("languageCode", settings.langHint);
-    // The planner is far more accurate when it can see the form's real questions
-    // than when it has to invent a field name and hope the fuzzy matcher rescues
-    // it — and it is what lets "what is this form asking me?" be answerable.
-    form.append(
-      "context",
-      JSON.stringify({
-        openTabs: await openTabSummary(),
-        formLabels: await activeFormLabels(),
-      })
-    );
-
-    const res = await fetch(`${serverUrl}/api/voice-command`, {
-      method: "POST",
-      body: form,
-      headers,
-    });
-    if (!res.ok) throw new Error(await describeHttpError(res));
-    const data = await res.json();
-
-    if (!data.transcript) {
-      await setState({ phase: "done", summary: data.summary ?? "I didn't hear anything." });
-      return;
-    }
-
-    // Show every planned task immediately, so the user sees the fan-out happen
-    // rather than staring at a spinner.
-    const pending = (data.browserTasks ?? []).map((t) => ({
+    // Show every planned task at once, so the fan-out is visible rather than a
+    // spinner that happens to end with several things done.
+    const pending = (plan.browserTasks ?? []).map((t) => ({
       id: t.id,
       tool: t.tool,
       status: "pending",
@@ -273,12 +279,12 @@ async function runCommand(audioBase64) {
     }));
     await setState({
       phase: "working",
-      transcript: data.transcript,
-      tasks: [...(data.serverResults ?? []), ...pending],
+      transcript: plan.transcript,
+      tasks: [...(plan.serverResults ?? []), ...pending],
     });
 
-    const browserResults = await executeBrowserTasks(data.browserTasks ?? []);
-    const allResults = [...(data.serverResults ?? []), ...browserResults];
+    const browserResults = await executeBrowserTasks(plan.browserTasks ?? []);
+    const allResults = [...(plan.serverResults ?? []), ...browserResults];
     await setState({ tasks: allResults });
 
     const done = await fetch(`${serverUrl}/api/complete`, {
@@ -289,32 +295,11 @@ async function runCommand(audioBase64) {
     if (!done.ok) throw new Error(await describeHttpError(done));
     const { summary } = await done.json();
 
-    // Show the answer the moment it exists. Speech is fetched afterwards, so the
-    // two seconds TTS takes are spent with the reply already on screen instead of
-    // behind a spinner.
+    // Show the answer the moment it exists; speech follows separately.
     await setState({ phase: "done", summary });
-
-    if (settings.muted !== true) {
-      speak(serverUrl, headers, summary).catch(() => {});
-    }
+    if (settings.muted !== true) speak(serverUrl, headers, summary).catch(() => {});
   } catch (err) {
     await setState({ phase: "error", error: err.message });
-  }
-}
-
-/** Fetch and play the spoken reply. Never blocks the visible result. */
-async function speak(serverUrl, headers, text) {
-  const res = await fetch(`${serverUrl}/api/speak`, {
-    method: "POST",
-    headers: { ...headers, "content-type": "application/json" },
-    body: JSON.stringify({ text }),
-  });
-  if (!res.ok) return;
-  const { audioUrl } = await res.json();
-  // Muting mid-flight should win over a request made before it.
-  const { muted } = await chrome.storage.local.get("muted");
-  if (audioUrl && muted !== true) {
-    await sendToOffscreen({ type: "PLAY_AUDIO", url: audioUrl }).catch(() => {});
   }
 }
 
@@ -495,13 +480,6 @@ async function cycleTab(tabs, direction) {
   const next = sorted[(currentIdx + direction + sorted.length) % sorted.length];
   await chrome.tabs.update(next.id, { active: true });
   return `switched to ${next.title}`;
-}
-
-function base64ToBlob(base64, type) {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new Blob([bytes], { type });
 }
 
 async function describeHttpError(res) {

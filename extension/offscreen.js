@@ -1,51 +1,60 @@
 /**
- * Offscreen worker: owns the microphone and the speaker.
+ * Offscreen worker: owns the microphone, the speaker, and the live audio stream.
  *
- * Recording lives here rather than in the popup because the popup is destroyed
- * as soon as it loses focus - which happens the instant Aalto opens or switches
- * a tab. Playback lives here because a service worker has no DOM and therefore
- * no Audio element.
+ * It lives outside the popup because the popup is destroyed as soon as it loses
+ * focus — the instant Aalto opens or switches a tab. It is not the background
+ * worker because a service worker has no DOM, so no getUserMedia and no Audio.
  *
- * It also does the listening-for-silence, so a command ends when the speaker
- * stops talking rather than when they remember to release a button.
+ * Audio is streamed to the server WHILE the user speaks rather than recorded and
+ * sent afterwards. That matters more than it sounds: with record-then-send, the
+ * transcription clock only starts once the speaker stops, so a six-second command
+ * cost six seconds of recording plus another six of transcription. Streaming
+ * overlaps the two, and the reply lands about as soon as the sentence ends.
  */
 
 const SILENCE_RMS = 0.012; // below this counts as room tone rather than speech
 const SILENCE_HOLD_MS = 800; // quiet for this long after speech -> commit
 const LEAD_IN_GRACE_MS = 4000; // wait at least this long for someone to start
-const MAX_UTTERANCE_MS = 25_000; // hard stop; Intron's session cap is far higher
-const LEVEL_INTERVAL_MS = 60; // waveform refresh sent to the popup
+const MAX_UTTERANCE_MS = 25_000; // hard stop
+const SAMPLE_RATE = 16_000; // what Sahara wants; asking for it avoids resampling
+const FRAME_BYTES = 8192; // 0.25s of PCM16 — inside Sahara's 1–32KB chunk window
 
-let mediaRecorder = null;
-let chunks = [];
 let stream = null;
+let audioCtx = null;
+let worklet = null;
+let source = null;
+let socket = null;
 let player = null;
 
-let audioCtx = null;
-let analyser = null;
-let levelTimer = null;
+let pending = []; // Int16 frames not yet sent
+let pendingBytes = 0;
 let startedAt = 0;
 let lastVoiceAt = 0;
 let heardVoice = false;
-let autoStopTimer = null;
+let active = false;
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.target !== "offscreen") return false;
 
   switch (message.type) {
-    case "START_RECORDING":
-      startRecording()
+    case "START_STREAM":
+      startStream(message.config)
         .then(() => sendResponse({ ok: true }))
-        // The name matters: the background worker uses NotAllowedError to decide
-        // whether to open the permission page, and err.message alone is vague.
+        // The name matters: the worker uses NotAllowedError to decide whether to
+        // open the permission page, and err.message alone is vague.
         .catch((err) => sendResponse({ ok: false, error: err.message, name: err.name }));
-      return true; // async response
+      return true;
 
-    case "STOP_RECORDING":
-      stopRecording()
-        .then((audioBase64) => sendResponse({ ok: true, audioBase64 }))
+    case "STOP_STREAM":
+      finish("manual")
+        .then(() => sendResponse({ ok: true }))
         .catch((err) => sendResponse({ ok: false, error: err.message }));
       return true;
+
+    case "ABORT_STREAM":
+      teardown();
+      sendResponse({ ok: true });
+      return false;
 
     case "PLAY_AUDIO":
       play(message.url)
@@ -63,124 +72,186 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 });
 
-async function startRecording() {
-  if (mediaRecorder && mediaRecorder.state === "recording") {
-    throw new Error("already recording");
-  }
+// --- capture ----------------------------------------------------------------
+
+async function startStream(config) {
+  if (active) throw new Error("already streaming");
+
   // Held open across commands so repeated use does not re-prompt or re-negotiate
   // the device, which adds a noticeable delay before the first syllable lands.
   if (!stream) {
     stream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        sampleRate: SAMPLE_RATE,
+      },
     });
   }
 
-  chunks = [];
-  mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
-  mediaRecorder.ondataavailable = (e) => {
-    if (e.data.size > 0) chunks.push(e.data);
-  };
-  mediaRecorder.start();
+  // Asking the context for 16 kHz means the browser resamples once, correctly,
+  // and nothing downstream has to.
+  if (!audioCtx || audioCtx.sampleRate !== SAMPLE_RATE) {
+    if (audioCtx) await audioCtx.close();
+    audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+    await audioCtx.audioWorklet.addModule("pcm-worklet.js");
+  }
+  if (audioCtx.state === "suspended") await audioCtx.resume();
 
+  await openSocket(config);
+
+  pending = [];
+  pendingBytes = 0;
   startedAt = Date.now();
   lastVoiceAt = 0;
   heardVoice = false;
-  startMetering();
+  active = true;
+
+  source = audioCtx.createMediaStreamSource(stream);
+  worklet = new AudioWorkletNode(audioCtx, "pcm-capture");
+  worklet.port.onmessage = (e) => onSamples(e.data);
+  source.connect(worklet);
+  // Deliberately not connected to the destination: routing the microphone to the
+  // speakers would echo the user back at themselves.
 }
 
-/**
- * Watch the input level: drive the popup's waveform, and decide when the speaker
- * has finished. Ending on silence rather than on a button release is what lets
- * the whole interaction be "press the shortcut, talk, done".
- */
-function startMetering() {
-  if (!audioCtx) audioCtx = new AudioContext();
-  if (audioCtx.state === "suspended") audioCtx.resume();
+function onSamples(float32) {
+  if (!active) return;
 
-  analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 1024;
-  analyser.smoothingTimeConstant = 0.6;
-  audioCtx.createMediaStreamSource(stream).connect(analyser);
-
-  const buf = new Float32Array(analyser.fftSize);
-
-  levelTimer = setInterval(() => {
-    analyser.getFloatTimeDomainData(buf);
-    let sum = 0;
-    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
-    const rms = Math.sqrt(sum / buf.length);
-
-    // Nobody may be listening; that is not an error.
-    chrome.runtime.sendMessage({ type: "LEVEL", value: rms }).catch(() => {});
-
-    const now = Date.now();
-    if (rms >= SILENCE_RMS) {
-      heardVoice = true;
-      lastVoiceAt = now;
-    }
-
-    const elapsed = now - startedAt;
-    const quietFor = lastVoiceAt ? now - lastVoiceAt : 0;
-
-    if (heardVoice && quietFor >= SILENCE_HOLD_MS) {
-      requestAutoStop("silence");
-    } else if (!heardVoice && elapsed >= LEAD_IN_GRACE_MS) {
-      // Opened by accident, or the mic is dead - don't sit recording room tone.
-      requestAutoStop("nothing heard");
-    } else if (elapsed >= MAX_UTTERANCE_MS) {
-      requestAutoStop("max length");
-    }
-  }, LEVEL_INTERVAL_MS);
-}
-
-function stopMetering() {
-  clearInterval(levelTimer);
-  levelTimer = null;
-  if (analyser) {
-    analyser.disconnect();
-    analyser = null;
+  let sum = 0;
+  const int16 = new Int16Array(float32.length);
+  for (let i = 0; i < float32.length; i++) {
+    const s = Math.max(-1, Math.min(1, float32[i]));
+    int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    sum += s * s;
   }
-}
+  const rms = Math.sqrt(sum / float32.length);
 
-/** Hand the decision to the background worker so one path drives the whole flow. */
-function requestAutoStop(reason) {
-  if (autoStopTimer) return;
-  autoStopTimer = setTimeout(() => {
-    autoStopTimer = null;
-  }, 500);
-  stopMetering();
-  chrome.runtime.sendMessage({ type: "AUTO_STOP", reason, heardVoice })?.catch?.(() => {});
-}
+  // Nobody may be listening to the waveform; that is not an error.
+  chrome.runtime.sendMessage({ type: "LEVEL", value: rms }).catch(() => {});
 
-async function stopRecording() {
-  stopMetering();
-  if (!mediaRecorder || mediaRecorder.state !== "recording") {
-    throw new Error("not recording");
+  pending.push(int16);
+  pendingBytes += int16.byteLength;
+  if (pendingBytes >= FRAME_BYTES) flush();
+
+  const now = Date.now();
+  if (rms >= SILENCE_RMS) {
+    heardVoice = true;
+    lastVoiceAt = now;
   }
 
-  const finished = new Promise((resolve) => {
-    mediaRecorder.onstop = resolve;
-  });
-  mediaRecorder.stop();
-  await finished;
+  const elapsed = now - startedAt;
+  const quietFor = lastVoiceAt ? now - lastVoiceAt : 0;
 
-  const blob = new Blob(chunks, { type: "audio/webm" });
-  chunks = [];
-  if (blob.size === 0) throw new Error("no audio captured");
-
-  // Messages cannot carry a Blob, so hand the bytes over as base64 and let the
-  // service worker rebuild them for the multipart upload.
-  return await blobToBase64(blob);
+  if (heardVoice && quietFor >= SILENCE_HOLD_MS) finish("silence");
+  else if (!heardVoice && elapsed >= LEAD_IN_GRACE_MS) finish("nothing heard");
+  else if (elapsed >= MAX_UTTERANCE_MS) finish("max length");
 }
 
-function blobToBase64(blob) {
+function flush() {
+  if (pending.length === 0) return;
+  const merged = new Int16Array(pendingBytes / 2);
+  let offset = 0;
+  for (const chunk of pending) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  pending = [];
+  pendingBytes = 0;
+
+  if (socket?.readyState === WebSocket.OPEN) socket.send(merged.buffer);
+}
+
+// --- transport --------------------------------------------------------------
+
+function openSocket(config) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result.split(",")[1]);
-    reader.onerror = () => reject(new Error("could not read recorded audio"));
-    reader.readAsDataURL(blob);
+    const url = `${config.serverUrl.replace(/^http/, "ws")}/api/stream`;
+    socket = new WebSocket(url);
+    socket.binaryType = "arraybuffer";
+
+    const failFast = () => reject(new Error("could not reach the Aalto server"));
+    socket.addEventListener("error", failFast, { once: true });
+
+    socket.addEventListener("open", () => {
+      socket.removeEventListener("error", failFast);
+      socket.send(
+        JSON.stringify({
+          type: "start",
+          languageCode: config.languageCode,
+          apiKey: config.apiKey,
+          context: config.context,
+        })
+      );
+      resolve();
+    });
+
+    // Everything the server says is forwarded to the background worker, which
+    // owns the state machine. This document only handles audio.
+    socket.addEventListener("message", (event) => {
+      if (typeof event.data !== "string") return;
+      try {
+        chrome.runtime.sendMessage({ type: "STREAM_EVENT", event: JSON.parse(event.data) });
+      } catch {
+        // Malformed frame; the server-side error path reports the real problem.
+      }
+    });
+
+    socket.addEventListener("close", () => {
+      if (active) {
+        active = false;
+        chrome.runtime
+          .sendMessage({
+            type: "STREAM_EVENT",
+            event: { type: "error", message: "the connection to the server dropped" },
+          })
+          .catch(() => {});
+      }
+      teardownCapture();
+    });
   });
 }
+
+/** Stop capturing, send whatever is buffered, and ask the server to commit. */
+async function finish(reason) {
+  if (!active) return;
+  active = false;
+
+  teardownCapture();
+  flush();
+
+  if (socket?.readyState !== WebSocket.OPEN) return;
+  if (!heardVoice && reason === "nothing heard") {
+    socket.send(JSON.stringify({ type: "abort", reason }));
+    socket.close();
+    return;
+  }
+  socket.send(JSON.stringify({ type: "commit" }));
+}
+
+function teardownCapture() {
+  if (worklet) {
+    worklet.port.onmessage = null;
+    worklet.disconnect();
+    worklet = null;
+  }
+  if (source) {
+    source.disconnect();
+    source = null;
+  }
+}
+
+function teardown() {
+  active = false;
+  teardownCapture();
+  if (socket?.readyState === WebSocket.OPEN) socket.close();
+  socket = null;
+  pending = [];
+  pendingBytes = 0;
+}
+
+// --- playback ---------------------------------------------------------------
 
 async function play(url) {
   stopPlayback();

@@ -7,6 +7,7 @@ import { TodoistClient } from "./integrations/todoist";
 import { executePlan, type TaskResult } from "./orchestrator/executor";
 import { Planner } from "./orchestrator/planner";
 import { Summariser } from "./orchestrator/summariser";
+import { attachStreamEndpoint } from "./stream";
 import { INTRON_SUPPORTED } from "./stt/intron";
 import { IntronStreamSttProvider } from "./stt/intronStream";
 import { IntronTtsProvider } from "./tts/intron";
@@ -175,6 +176,17 @@ function safeParseContext(raw: unknown): {
   }
 }
 
-app.listen(config.port, () => {
+const server = app.listen(config.port, () => {
   console.log(`Aalto server listening on http://localhost:${config.port}`);
+  console.log(`  live audio stream at ws://localhost:${config.port}/api/stream`);
+});
+
+// The live path. The HTTP /api/voice-command route stays as the fallback for
+// clients that cannot hold a socket open, and as a way to bisect a failure
+// between the transport and everything behind it.
+attachStreamEndpoint(server, {
+  intronApiKey: config.intron.apiKey,
+  planner,
+  todoist,
+  authKey: config.auth.apiKey,
 });
