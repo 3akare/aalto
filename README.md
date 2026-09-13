@@ -94,6 +94,12 @@ npx tsc -p . --noEmit      # type-check
 npx biome check .          # lint and format (run from the repo root)
 ```
 
+## Licence
+
+Aalto's source is MIT. It bundles a font and icon set under their own licences,
+and its benchmark output derives from a CC BY-NC-SA corpus whose terms carry
+over — see [NOTICE.md](NOTICE.md), which spells out which part is which.
+
 ## Submission documents
 
 - [Solution description](docs/SOLUTION.md)
