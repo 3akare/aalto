@@ -5,6 +5,8 @@ export interface IntronStreamOptions {
   apiKey: string;
   languageCode: string; // required by the Intron streaming API
   sampleRate?: number; // default 16000
+  /** Hard ceiling on the whole session, so a vendor stall cannot hang the caller. */
+  sessionTimeoutMs?: number;
   onPartial?: (transcript: string) => void;
   onError?: (message: string) => void;
 }
@@ -28,29 +30,53 @@ export interface IntronStreamHandle {
  */
 export function openIntronStream(opts: IntronStreamOptions): Promise<IntronStreamHandle> {
   const sampleRate = opts.sampleRate ?? 16000;
+  const sessionTimeoutMs = opts.sessionTimeoutMs ?? 120_000;
   const url =
     `wss://infer.voice.intron.io/stt/v1/stream` +
     `?sample_rate=${sampleRate}&bit_rate=16&num_channels=1` +
     `&use_language_asr_input=${encodeURIComponent(opts.languageCode)}`;
 
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url, {
-      headers: { Authorization: `Bearer ${opts.apiKey}` },
-    });
+    const ws = new WebSocket(url, { headers: { Authorization: `Bearer ${opts.apiKey}` } });
 
     // The server expects ack_id to be a sequential counter starting at 1. Starting
     // at 0 (or sending byte offsets) gets every chunk answered with
     // CHUNK_ID_MISMATCH_WITH_TOTAL, and the committed transcript comes back
     // duplicated because the server never accepted the stream in order.
     let ackId = 1;
+    let opened = false;
+
+    // A terminal outcome can arrive at ANY point - including while chunks are
+    // still being sent, before commit() has been called. The earlier version only
+    // held callbacks created by commit(), so an early error was dropped on the
+    // floor and commit() then waited forever. Recording the outcome instead means
+    // a late commit() settles immediately from stored state.
+    let outcome: { transcript: string } | { error: Error } | null = null;
     let resolveCommit: ((transcript: string) => void) | null = null;
     let rejectCommit: ((err: Error) => void) | null = null;
 
-    ws.on("open", () => {
-      // Wait for SESSION_CREATED before resolving so callers know the session is live.
-    });
+    const settle = (result: { transcript: string } | { error: Error }) => {
+      if (outcome) return;
+      outcome = result;
+      clearTimeout(timer);
+      if ("error" in result) {
+        opts.onError?.(result.error.message);
+        rejectCommit?.(result.error);
+        if (!opened) reject(result.error);
+      } else {
+        resolveCommit?.(result.transcript);
+      }
+      if (ws.readyState === WebSocket.OPEN) ws.close();
+    };
+
+    // Without this a vendor-side stall freezes the whole HTTP request behind it.
+    const timer = setTimeout(
+      () => settle({ error: new Error(`Intron stream timed out after ${sessionTimeoutMs}ms`) }),
+      sessionTimeoutMs
+    );
 
     ws.on("message", (raw) => {
+      // biome-ignore lint/suspicious/noExplicitAny: protocol messages are dynamically shaped
       let msg: any;
       try {
         msg = JSON.parse(raw.toString());
@@ -60,8 +86,10 @@ export function openIntronStream(opts: IntronStreamOptions): Promise<IntronStrea
 
       switch (msg.message_type) {
         case "SESSION_CREATED":
+          opened = true;
           resolve({
             sendChunk: (chunk: Buffer) => {
+              if (outcome || ws.readyState !== WebSocket.OPEN) return;
               ws.send(
                 JSON.stringify({
                   message_type: "INPUT_AUDIO_CHUNK",
@@ -72,11 +100,19 @@ export function openIntronStream(opts: IntronStreamOptions): Promise<IntronStrea
             },
             commit: () =>
               new Promise<string>((res, rej) => {
+                if (outcome) {
+                  if ("error" in outcome) rej(outcome.error);
+                  else res(outcome.transcript);
+                  return;
+                }
                 resolveCommit = res;
                 rejectCommit = rej;
                 ws.send(JSON.stringify({ message_type: "COMMIT" }));
               }),
-            close: () => ws.close(),
+            close: () => {
+              clearTimeout(timer);
+              if (ws.readyState === WebSocket.OPEN) ws.close();
+            },
           });
           break;
 
@@ -85,8 +121,15 @@ export function openIntronStream(opts: IntronStreamOptions): Promise<IntronStrea
           break;
 
         case "COMMITTED_TRANSCRIPT":
-          resolveCommit?.(msg.transcript_text ?? "");
-          ws.close();
+          settle({ transcript: msg.transcript_text ?? "" });
+          break;
+
+        // Not terminal on its own, but it means the stream is being ignored - a
+        // silent mis-sequence is exactly what produced duplicated transcripts.
+        case "CHUNK_ID_MISMATCH_WITH_TOTAL":
+          opts.onError?.(
+            `chunk ${msg.chunk_id_input} rejected, server expected ${msg.chunk_id_expected}`
+          );
           break;
 
         case "ERROR":
@@ -96,16 +139,17 @@ export function openIntronStream(opts: IntronStreamOptions): Promise<IntronStrea
         case "QUOTA_EXCEEDED":
         case "SESSION_TIME_LIMIT_EXCEEDED":
         case "INSUFFICIENT_AUDIO_ACTIVITY":
-          opts.onError?.(msg.message ?? msg.message_type);
-          rejectCommit?.(new Error(msg.message ?? msg.message_type));
+          settle({ error: new Error(msg.message ?? msg.message_type) });
           break;
       }
     });
 
-    ws.on("error", (err) => {
-      opts.onError?.(err.message);
-      reject(err);
-      rejectCommit?.(err);
+    ws.on("error", (err) => settle({ error: err }));
+
+    // A close before any transcript would otherwise leave commit() pending.
+    ws.on("close", (code, reasonBuf) => {
+      const reason = reasonBuf?.toString() || `code ${code}`;
+      settle({ error: new Error(`Intron stream closed before committing (${reason})`) });
     });
   });
 }

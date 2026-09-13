@@ -4,8 +4,9 @@ import multer from "multer";
 import { toWav16kMono } from "./audio/transcode";
 import { assertServerConfig, config } from "./config";
 import { TodoistClient } from "./integrations/todoist";
+import { executePlan, type TaskResult } from "./orchestrator/executor";
 import { Planner } from "./orchestrator/planner";
-import { isServerSide, type RoutedAction } from "./orchestrator/tools";
+import { Summariser } from "./orchestrator/summariser";
 import { INTRON_SUPPORTED } from "./stt/intron";
 import { IntronStreamSttProvider } from "./stt/intronStream";
 import { IntronTtsProvider } from "./tts/intron";
@@ -15,8 +16,7 @@ assertServerConfig();
 const app = express();
 
 // Wide-open CORS let anyone who could reach the port spend the API credits and
-// write to the user's Todoist. Restrict to the extension's own origin when one
-// is configured; fall back to permissive only when the allowlist is empty.
+// write to the user's Todoist. Restrict to configured origins when present.
 app.use(
   cors(
     config.auth.allowedOrigins.length > 0
@@ -24,15 +24,15 @@ app.use(
       : { origin: true }
   )
 );
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
-// Streaming: the sync endpoint caps at ~5s on this account, and spoken commands
-// routinely run longer than that.
+// Streaming, not sync: the sync endpoint caps at ~5s and spoken commands run longer.
 const stt = new IntronStreamSttProvider(config.intron.apiKey, INTRON_SUPPORTED);
 const tts = new IntronTtsProvider(config.intron.apiKey, config.intron.baseUrl);
 const planner = new Planner(config.gemini.apiKey, config.gemini.plannerModel);
+const summariser = new Summariser(config.gemini.apiKey, config.gemini.plannerModel);
 const todoist = new TodoistClient(config.todoist.apiToken);
 
 /** Shared-secret gate. No-ops when AALTO_API_KEY is unset (startup already warned). */
@@ -48,40 +48,24 @@ function requireApiKey(
   res.status(401).json({ error: "unauthorised" });
 }
 
-/**
- * Actions the server resolves itself (Todoist, clarify). Everything else is
- * returned to the extension, which alone has chrome.tabs and page DOM access.
- */
-async function resolveServerSideAction(action: RoutedAction): Promise<string | null> {
-  switch (action.tool) {
-    case "todoist_add": {
-      const task = await todoist.addTask(action.input.content as string, {
-        dueString: action.input.dueString as string | undefined,
-      });
-      return `Added "${task.content}" to your Todoist${task.due ? `, due ${task.due}` : ""}.`;
-    }
-    case "todoist_complete": {
-      const task = await todoist.completeTaskByDescription(action.input.description as string);
-      return task
-        ? `Marked "${task.content}" as done.`
-        : `I couldn't find a task matching "${action.input.description}".`;
-    }
-    case "todoist_update": {
-      const task = await todoist.updateTaskByDescription(action.input.description as string, {
-        content: action.input.newContent as string | undefined,
-        dueString: action.input.newDueString as string | undefined,
-      });
-      return task
-        ? `Updated the task to "${task.content}"${task.due ? `, due ${task.due}` : ""}.`
-        : `I couldn't find a task matching "${action.input.description}".`;
-    }
-    case "clarify":
-      return action.input.question as string;
-    default:
-      return null;
-  }
+/** Intron TTS caps at 4096 characters; a spoken summary is never near that, but clamp anyway. */
+async function speak(text: string): Promise<string | undefined> {
+  const out = await tts.generate({
+    text: text.slice(0, 4000),
+    voiceAccent: "yoruba",
+    voiceGender: "female",
+    voiceLanguage: "en",
+  });
+  return out.audioUrl;
 }
 
+/**
+ * Transcribe, plan, and run everything the server can run.
+ *
+ * Returns the browser-side tasks for the extension to execute. The extension
+ * posts their results back to /api/complete, which produces the spoken summary -
+ * so the summary describes what actually happened rather than what was dispatched.
+ */
 app.post("/api/voice-command", requireApiKey, upload.single("audio"), async (req, res) => {
   try {
     if (!req.file) {
@@ -89,44 +73,61 @@ app.post("/api/voice-command", requireApiKey, upload.single("audio"), async (req
       return;
     }
     const languageCode = (req.body.languageCode as string) || undefined;
-    // The extension records WebM/Opus; every STT provider is given 16 kHz mono
-    // PCM16 WAV, transcoded once here so the wire format matches the declared type.
-    const wav = await toWav16kMono(req.file.buffer);
 
+    // The extension records WebM/Opus; every provider gets 16 kHz mono PCM16 WAV.
+    const wav = await toWav16kMono(req.file.buffer);
     const transcription = await stt.transcribe(wav, {
       languageCode,
       filename: req.file.originalname,
     });
 
-    const plan = await planner.plan(transcription.transcript);
-
-    // TODO(day 2): fan the plan out through the executor and stream progress over
-    // SSE. For now the first task is resolved so the end-to-end path stays testable.
-    const [first] = plan.tasks;
-    const confirmationText = isServerSide(first.tool) ? await resolveServerSideAction(first) : null;
-
-    let audioUrl: string | undefined;
-    const muted = req.body.muted === "true";
-    if (confirmationText && !muted) {
-      const ttsResult = await tts.generate({
-        text: confirmationText,
-        voiceAccent: "yoruba",
-        voiceGender: "female",
-        voiceLanguage: "en",
+    if (!transcription.transcript.trim()) {
+      res.json({
+        transcript: "",
+        tasks: [],
+        serverResults: [],
+        browserTasks: [],
+        summary: "I didn't hear anything. Try again?",
       });
-      audioUrl = ttsResult.audioUrl;
+      return;
     }
+
+    const context = safeParseContext(req.body.context);
+    const plan = await planner.plan(transcription.transcript, context);
+    const { serverResults, browserTasks } = await executePlan(plan.tasks, todoist);
 
     res.json({
       transcript: transcription.transcript,
+      sttLatencyMs: transcription.latencyMs,
       tasks: plan.tasks,
-      action: first,
-      confirmationText,
-      audioUrl,
+      serverResults,
+      browserTasks,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "internal error";
-    console.error(err);
+    console.error("[voice-command]", message);
+    res.status(500).json({ error: message });
+  }
+});
+
+/**
+ * Collect every task's outcome and speak one summary.
+ *
+ * `muted` skips the TTS call entirely rather than generating audio and dropping
+ * it - that saves both quota and latency, and the written summary still returns.
+ */
+app.post("/api/complete", requireApiKey, async (req, res) => {
+  try {
+    const results = (req.body.results ?? []) as TaskResult[];
+    const muted = req.body.muted === true;
+
+    const summary = await summariser.summarise(results);
+    const audioUrl = muted ? undefined : await speak(summary).catch(() => undefined);
+
+    res.json({ summary, audioUrl });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "internal error";
+    console.error("[complete]", message);
     res.status(500).json({ error: message });
   }
 });
@@ -136,7 +137,7 @@ app.get("/api/todoist/tasks", requireApiKey, async (_req, res) => {
     res.json(await todoist.listTasks());
   } catch (err) {
     const message = err instanceof Error ? err.message : "internal error";
-    console.error(err);
+    console.error("[todoist]", message);
     res.status(502).json({ error: message });
   }
 });
@@ -144,6 +145,16 @@ app.get("/api/todoist/tasks", requireApiKey, async (_req, res) => {
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
+
+function safeParseContext(raw: unknown): { openTabs?: { title: string; url: string }[] } {
+  if (typeof raw !== "string" || !raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 app.listen(config.port, () => {
   console.log(`Aalto server listening on http://localhost:${config.port}`);

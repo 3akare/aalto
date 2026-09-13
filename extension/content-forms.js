@@ -3,14 +3,19 @@
 // question container (role="listitem") instead.
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type === "LIST_FIELDS") {
+    sendResponse({ ok: true, labels: listQuestionLabels() });
+    return false;
+  }
   if (message.type !== "FORM_ACTION") return false;
+
   try {
     if (message.action.tool === "fill_form_field") {
-      const ok = fillField(message.action.input.fieldLabel, message.action.input.value);
-      sendResponse({ ok });
+      sendResponse(fillField(message.action.input.fieldLabel, message.action.input.value));
     } else if (message.action.tool === "submit_form") {
-      const ok = submitForm();
-      sendResponse({ ok });
+      sendResponse(submitForm());
+    } else {
+      sendResponse({ ok: false, error: `unknown form action ${message.action.tool}` });
     }
   } catch (err) {
     console.error("[Aalto] form action error:", err);
@@ -19,91 +24,224 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return true;
 });
 
+const STOPWORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "your",
+  "you",
+  "my",
+  "is",
+  "are",
+  "was",
+  "please",
+  "enter",
+  "what",
+  "whats",
+  "which",
+  "who",
+  "select",
+  "choose",
+  "provide",
+  "type",
+  "in",
+  "of",
+  "for",
+  "to",
+  "do",
+  "does",
+  "and",
+  "or",
+  "this",
+  "that",
+  "it",
+  "here",
+]);
+
 function normalize(text) {
   return (text || "")
     .toLowerCase()
-    .replace(/[*\s]+/g, " ")
+    .normalize("NFD")
+    .replace(/\p{Mn}/gu, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
     .trim();
+}
+
+function tokenise(text) {
+  return normalize(text)
+    .split(" ")
+    .filter((w) => w && !STOPWORDS.has(w));
+}
+
+/**
+ * Containment-biased token overlap.
+ *
+ * Dividing by the LARGER token set (the previous behaviour) meant a spoken "name"
+ * against "What is your full legal name?" scored 0.17 and fell under the 0.3
+ * threshold — short spoken labels failed against verbose questions as a rule.
+ * Dividing by the smaller set asks the right question: is what they said
+ * contained in this question?
+ */
+function similarity(spoken, questionText) {
+  const a = new Set(tokenise(spoken));
+  const b = new Set(tokenise(questionText));
+  if (a.size === 0 || b.size === 0) return 0;
+
+  let overlap = 0;
+  for (const t of a) {
+    if (b.has(t)) {
+      overlap += 1;
+      continue;
+    }
+    // Partial credit for a shared stem, so "registration" finds "register".
+    for (const u of b) {
+      if (
+        t.length >= 4 &&
+        u.length >= 4 &&
+        (u.startsWith(t.slice(0, 4)) || t.startsWith(u.slice(0, 4)))
+      ) {
+        overlap += 0.5;
+        break;
+      }
+    }
+  }
+  return overlap / Math.min(a.size, b.size);
 }
 
 function getQuestionContainers() {
   return Array.from(document.querySelectorAll('[role="listitem"]'));
 }
 
-function findBestMatchingQuestion(spokenLabel) {
-  const target = normalize(spokenLabel);
-  const containers = getQuestionContainers();
-
-  let best = null;
-  let bestScore = 0;
-  for (const container of containers) {
-    const heading = container.querySelector('[role="heading"]');
-    if (!heading) continue;
-    const questionText = normalize(heading.textContent);
-    const score = similarity(target, questionText);
-    if (score > bestScore) {
-      bestScore = score;
-      best = container;
-    }
-  }
-  // Require some minimum overlap so we don't fill the wrong field on a weak match.
-  return bestScore >= 0.3 ? best : null;
+function headingOf(container) {
+  const heading = container.querySelector('[role="heading"]');
+  return heading ? heading.textContent.trim() : "";
 }
 
-/** Very small token-overlap similarity - good enough for matching short spoken labels to question text. */
-function similarity(a, b) {
-  const aTokens = new Set(a.split(" ").filter(Boolean));
-  const bTokens = new Set(b.split(" ").filter(Boolean));
-  if (aTokens.size === 0 || bTokens.size === 0) return 0;
-  let overlap = 0;
-  for (const t of aTokens) if (bTokens.has(t)) overlap++;
-  return overlap / Math.max(aTokens.size, bTokens.size);
+/** Question text for every field on the page, sent up so the planner targets real fields. */
+function listQuestionLabels() {
+  return getQuestionContainers().map(headingOf).filter(Boolean);
+}
+
+function findBestMatchingQuestion(spokenLabel) {
+  const scored = getQuestionContainers()
+    .map((container) => ({ container, text: headingOf(container) }))
+    .filter((c) => c.text)
+    .map((c) => ({ ...c, score: similarity(spokenLabel, c.text) }))
+    .sort((x, y) => y.score - x.score);
+
+  if (scored.length === 0 || scored[0].score < 0.34) return { container: null, candidates: scored };
+  return { container: scored[0].container, label: scored[0].text, candidates: scored };
 }
 
 function fillField(fieldLabel, value) {
-  const container = findBestMatchingQuestion(fieldLabel);
+  const { container, label } = findBestMatchingQuestion(fieldLabel);
   if (!container) {
-    console.warn(`[Aalto] No form field matched "${fieldLabel}"`);
-    return false;
+    return { ok: false, error: `no question on this form matches "${fieldLabel}"` };
   }
 
   // Short text / paragraph text
   const textInput = container.querySelector('input[type="text"], textarea');
   if (textInput) {
     setNativeValue(textInput, value);
-    return true;
+    return { ok: true, detail: `filled "${label}" with "${value}"` };
   }
 
-  // Radio buttons / single choice - match option text to the spoken value.
+  // Date fields — a conspicuous gap for civic forms, which are full of them.
+  const dateInput = container.querySelector('input[type="date"]');
+  if (dateInput) {
+    const iso = toIsoDate(value);
+    if (!iso) return { ok: false, error: `couldn't read "${value}" as a date` };
+    setNativeValue(dateInput, iso);
+    return { ok: true, detail: `set "${label}" to ${iso}` };
+  }
+
+  // Radios / single choice.
   const radios = Array.from(container.querySelectorAll('[role="radio"]'));
   if (radios.length > 0) {
-    const match = radios.find((r) =>
-      normalize(r.getAttribute("aria-label")).includes(normalize(value))
-    );
-    (match ?? radios[0]).click();
-    return !!match;
+    const match = bestOption(radios, value);
+    // Previously this ran `(match ?? radios[0]).click()` — it selected the FIRST
+    // option when nothing matched, then reported failure. That silently put a
+    // wrong answer into a civic form, which is worse than doing nothing.
+    if (!match) {
+      const options = radios.map((r) => r.getAttribute("aria-label")).filter(Boolean);
+      return {
+        ok: false,
+        error: `"${value}" doesn't match any option for "${label}" (${options.join(", ")})`,
+      };
+    }
+    match.click();
+    return { ok: true, detail: `chose "${match.getAttribute("aria-label")}" for "${label}"` };
   }
 
-  // Checkboxes - same matching approach, click all that match (spoken value can list multiple).
+  // Checkboxes — the spoken value may list several.
   const checkboxes = Array.from(container.querySelectorAll('[role="checkbox"]'));
   if (checkboxes.length > 0) {
-    const spokenValues = value.split(",").map((v) => normalize(v));
-    let anyMatched = false;
-    for (const cb of checkboxes) {
-      const label = normalize(cb.getAttribute("aria-label"));
-      if (spokenValues.some((v) => label.includes(v))) {
-        cb.click();
-        anyMatched = true;
+    const wanted = value
+      .split(/,| and /)
+      .map((v) => v.trim())
+      .filter(Boolean);
+    const chosen = [];
+    for (const want of wanted) {
+      const match = bestOption(checkboxes, want);
+      if (match && !chosen.includes(match)) {
+        match.click();
+        chosen.push(match);
       }
     }
-    return anyMatched;
+    if (chosen.length === 0) {
+      return { ok: false, error: `"${value}" doesn't match any option for "${label}"` };
+    }
+    const names = chosen.map((c) => c.getAttribute("aria-label")).join(", ");
+    return { ok: true, detail: `ticked ${names} for "${label}"` };
   }
 
-  console.warn(`[Aalto] Matched question for "${fieldLabel}" but found no fillable input type.`);
-  return false;
+  // Dropdowns.
+  const listbox = container.querySelector('[role="listbox"]');
+  if (listbox) {
+    listbox.click();
+    const options = Array.from(
+      container.querySelectorAll('[role="option"], [role="listbox"] [data-value]')
+    ).filter((o) => (o.textContent || "").trim());
+    const match = bestOption(options, value, (o) => o.textContent);
+    if (!match) {
+      listbox.click(); // close it again rather than leaving the menu hanging open
+      return { ok: false, error: `"${value}" isn't one of the choices for "${label}"` };
+    }
+    match.click();
+    return { ok: true, detail: `chose "${match.textContent.trim()}" for "${label}"` };
+  }
+
+  return { ok: false, error: `found "${label}" but couldn't tell what kind of field it is` };
 }
 
-/** React-controlled inputs ignore plain `.value =` assignment; dispatch a real input event too. */
+/** Pick the option whose text best matches the spoken value, or null if none is close. */
+function bestOption(elements, value, textOf = (el) => el.getAttribute("aria-label")) {
+  const scored = elements
+    .map((el) => ({ el, text: (textOf(el) || "").trim() }))
+    .filter((o) => o.text)
+    .map((o) => ({ ...o, score: similarity(value, o.text) }))
+    .sort((x, y) => y.score - x.score);
+  return scored.length > 0 && scored[0].score >= 0.5 ? scored[0].el : null;
+}
+
+/** Accept "1990-04-12", "12/04/1990", and plain English like "12 April 1990". */
+function toIsoDate(value) {
+  const trimmed = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+
+  const dmy = trimmed.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
+  if (dmy) {
+    const [, d, m, y] = dmy;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+
+  const parsed = Date.parse(trimmed);
+  if (!Number.isNaN(parsed)) return new Date(parsed).toISOString().slice(0, 10);
+  return null;
+}
+
+/** React-controlled inputs ignore plain `.value =` assignment; dispatch real events too. */
 function setNativeValue(element, value) {
   const proto =
     element.tagName === "TEXTAREA"
@@ -119,10 +257,7 @@ function submitForm() {
   const submitBtn = Array.from(document.querySelectorAll('[role="button"]')).find((b) =>
     normalize(b.textContent).includes("submit")
   );
-  if (!submitBtn) {
-    console.warn("[Aalto] Submit button not found.");
-    return false;
-  }
+  if (!submitBtn) return { ok: false, error: "couldn't find the submit button" };
   submitBtn.click();
-  return true;
+  return { ok: true, detail: "submitted the form" };
 }
