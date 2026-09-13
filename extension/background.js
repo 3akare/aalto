@@ -98,19 +98,38 @@ let summonedByShortcut = false;
 
 chrome.commands?.onCommand.addListener(async (command) => {
   if (command !== SHORTCUT_COMMAND) return;
+
+  // Deliberately NOT the reserved _execute_action: Chrome handles that one
+  // natively and never dispatches onCommand, so the worker could not tell a
+  // shortcut press from a toolbar click.
+  //
+  // Recording starts HERE rather than waiting for the popup to open and ask.
+  // The popup is only a view - the offscreen document does the recording - so
+  // tying the shortcut to chrome.action.openPopup() (Chrome 127+, and refused
+  // in some window states) meant the whole feature failed wherever that call
+  // did. Pressing the shortcut now records regardless; the window is opened
+  // afterwards, best effort, purely so there is something to look at.
+  const busy = state.phase === "thinking" || state.phase === "working";
+  if (busy) return;
+
+  if (state.phase === "recording") {
+    // A second press is the natural way to say "stop", and the only way to stop
+    // at all when no popup opened.
+    await cancelRecording().catch(() => {});
+    return;
+  }
+
   summonedByShortcut = true;
-  try {
-    // Deliberately NOT the reserved _execute_action: Chrome handles that one
-    // natively and never dispatches onCommand, so the worker could not tell a
-    // shortcut press from a toolbar click and the popup always waited for the
-    // button. A named command dispatches, and opens the popup itself.
-    await chrome.action.openPopup();
-  } catch (err) {
-    // openPopup needs Chrome 127+. Without it the shortcut cannot open the
-    // window at all, so clear the flag rather than leaving it armed to
-    // auto-record the next time the popup is opened by hand.
+  beginRecording().catch((err) => {
     summonedByShortcut = false;
-    console.warn("[Aalto] could not open the popup from the shortcut:", err);
+    setState({ phase: "error", error: err.message });
+  });
+
+  try {
+    await chrome.action.openPopup();
+  } catch {
+    // No popup on this Chrome, or not allowed right now. Recording is already
+    // under way and the reply will still be spoken, so this is not fatal.
   }
 });
 

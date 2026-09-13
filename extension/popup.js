@@ -236,5 +236,10 @@ chrome.runtime.onMessage.addListener((message) => {
 chrome.runtime.sendMessage({ type: "POPUP_OPENED" }, (res) => {
   if (chrome.runtime.lastError) return;
   render(res?.state);
-  if (res?.autoStart) chrome.runtime.sendMessage({ type: "START_RECORDING" }).catch(() => {});
+  // The shortcut starts recording in the worker before this window exists, so
+  // only ask for a fresh one if nothing is already under way.
+  const idle = !res?.state || res.state.phase === "idle" || res.state.phase === "done";
+  if (res?.autoStart && idle) {
+    chrome.runtime.sendMessage({ type: "START_RECORDING" }).catch(() => {});
+  }
 });
