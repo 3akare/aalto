@@ -5,7 +5,7 @@
  * policy blocks remote resources on extension pages, and the popup should render
  * identically with no network at all.
  *
- * Every glyph is from the `-line` set — the outlined weight, to match a UI that
+ * Every glyph is from the `-line` set - the outlined weight, to match a UI that
  * uses no bold anywhere.
  */
 const RI = {
@@ -41,8 +41,8 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 /**
  * Build an <svg> for one glyph. Decorative by default; the button carries the label.
  *
- * Loaded as a classic script, not a module — MV3 forbids inline scripts and this
- * file has no import surface — so popup.js picks it up off the global scope.
+ * Loaded as a classic script, not a module - MV3 forbids inline scripts and this
+ * file has no import surface - so popup.js picks it up off the global scope.
  */
 // biome-ignore lint/correctness/noUnusedVariables: consumed by popup.js via <script>
 function riIcon(name, size = 18) {

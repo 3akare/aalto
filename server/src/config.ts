@@ -29,7 +29,7 @@ export const config = {
   assemblyai: { apiKey: optional("ASSEMBLYAI_API_KEY") },
   gemini: {
     apiKey: required("GEMINI_API_KEY"),
-    plannerModel: optional("GEMINI_PLANNER_MODEL", "gemini-3.8-flash"),
+    plannerModel: optional("GEMINI_PLANNER_MODEL", "gemini-3.1-flash-lite"),
     transcribeModel: optional("GEMINI_TRANSCRIBE_MODEL", "gemini-3.5-transcribe"),
   },
   huggingface: { token: optional("HF_TOKEN") },

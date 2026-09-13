@@ -83,7 +83,7 @@ function tokenise(text) {
  *
  * Dividing by the LARGER token set (the previous behaviour) meant a spoken "name"
  * against "What is your full legal name?" scored 0.17 and fell under the 0.3
- * threshold — short spoken labels failed against verbose questions as a rule.
+ * threshold - short spoken labels failed against verbose questions as a rule.
  * Dividing by the smaller set asks the right question: is what they said
  * contained in this question?
  */
@@ -189,7 +189,7 @@ function fillField(fieldLabel, value) {
     return { ok: true, detail: `filled "${label}" with "${value}"` };
   }
 
-  // Date fields — a conspicuous gap for civic forms, which are full of them.
+  // Date fields - a conspicuous gap for civic forms, which are full of them.
   const dateInput = container.querySelector('input[type="date"]');
   if (dateInput) {
     const iso = toIsoDate(value);
@@ -202,7 +202,7 @@ function fillField(fieldLabel, value) {
   const radios = Array.from(container.querySelectorAll('[role="radio"]'));
   if (radios.length > 0) {
     const match = bestOption(radios, value);
-    // Previously this ran `(match ?? radios[0]).click()` — it selected the FIRST
+    // Previously this ran `(match ?? radios[0]).click()` - it selected the FIRST
     // option when nothing matched, then reported failure. That silently put a
     // wrong answer into a civic form, which is worse than doing nothing.
     if (!match) {
@@ -216,7 +216,7 @@ function fillField(fieldLabel, value) {
     return { ok: true, detail: `chose "${match.getAttribute("aria-label")}" for "${label}"` };
   }
 
-  // Checkboxes — the spoken value may list several.
+  // Checkboxes - the spoken value may list several.
   const checkboxes = Array.from(container.querySelectorAll('[role="checkbox"]'));
   if (checkboxes.length > 0) {
     const wanted = value

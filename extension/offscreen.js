@@ -2,7 +2,7 @@
  * Offscreen worker: owns the microphone, the speaker, and the live audio stream.
  *
  * It lives outside the popup because the popup is destroyed as soon as it loses
- * focus — the instant Aalto opens or switches a tab. It is not the background
+ * focus - the instant Aalto opens or switches a tab. It is not the background
  * worker because a service worker has no DOM, so no getUserMedia and no Audio.
  *
  * Audio is streamed to the server WHILE the user speaks rather than recorded and
@@ -17,7 +17,7 @@ const SILENCE_HOLD_MS = 800; // quiet for this long after speech -> commit
 const LEAD_IN_GRACE_MS = 4000; // wait at least this long for someone to start
 const MAX_UTTERANCE_MS = 25_000; // hard stop
 const SAMPLE_RATE = 16_000; // what Sahara wants; asking for it avoids resampling
-const FRAME_BYTES = 8192; // 0.25s of PCM16 — inside Sahara's 1–32KB chunk window
+const FRAME_BYTES = 8192; // 0.25s of PCM16 - inside Sahara's 1-32KB chunk window
 const LEVEL_INTERVAL_MS = 50; // waveform updates; see the throttle in onSamples
 const COMMIT_TIMEOUT_MS = 45_000; // give up if the server never answers a commit
 

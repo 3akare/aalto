@@ -16,7 +16,7 @@ Concretely:
   statistics and the sampling manifest; we do not publish the clips, and the manifest is committed
   precisely so a reader can reproduce our sample from the original source rather than from a copy of
   it we handed them.
-- **Evaluation data should not be sent to endpoints that train on it — and we fell short of this.**
+- **Evaluation data should not be sent to endpoints that train on it - and we fell short of this.**
   Google AI Studio's free tier may use submitted data for model training. Pushing an evaluation-only
   corpus through a training-enabled endpoint both strains the non-commercial licence and risks
   contaminating the benchmark for everyone downstream. Intron and AssemblyAI requests in our run went
@@ -30,7 +30,7 @@ The one place consented recording would arise is the demo video, which uses our 
 
 ## Privacy
 
-**Where audio goes.** The microphone is live only while a command is being recorded — it is opened on
+**Where audio goes.** The microphone is live only while a command is being recorded - it is opened on
 demand and the command ends on silence, so there is no always-listening mode and no wake word. Audio
 goes from the browser to a server the user runs themselves, and from there to Intron for
 transcription. It is not written to disk on the live path and not sent anywhere else.
@@ -39,7 +39,7 @@ transcription. It is not written to disk on the live path and not sent anywhere 
 is therefore treated as sensitive rather than as a local convenience:
 
 - The API is gated by a shared-secret header and a CORS origin allowlist. Without this, anything able
-  to reach the port could spend the user's API credits and write to their Todoist — which matters the
+  to reach the port could spend the user's API credits and write to their Todoist - which matters the
   moment the laptop is on a network the user does not control.
 - Credentials live in a git-ignored `.env`; none are committed, and startup fails fast rather than
   running half-configured.
@@ -47,7 +47,7 @@ is therefore treated as sensitive rather than as a local convenience:
 
 **Form contents.** Values spoken into a form are written into the form the user has open and nowhere
 else. Aalto does not log, store or transmit what was typed into a civic form. Open tab titles *are*
-sent to the planner as context, so that "switch to my Gmail tab" resolves to a real tab — that is a
+sent to the planner as context, so that "switch to my Gmail tab" resolves to a real tab - that is a
 deliberate, disclosed trade-off, and it is limited to titles and URLs of open tabs, capped at 20.
 
 **Third parties.** Transcription goes to Intron, planning and summarising to Google, and during
@@ -75,14 +75,14 @@ fairness claim needs.
 
 **Language coverage is reported as a result, not hidden.** Of AfriSwitch's 14 languages, AssemblyAI
 documents support for 7. Publishing a 14-language average that includes seven languages a vendor
-never claimed would be a rigged comparison. The headline is a CORE set — languages every evaluated
-vendor claims — and unsupported cells are shaded, footnoted and excluded from every average and
+never claimed would be a rigged comparison. The headline is a CORE set - languages every evaluated
+vendor claims - and unsupported cells are shaded, footnoted and excluded from every average and
 significance test. Coverage itself is a row in the table, because for a civic-access product "which
 languages does it serve at all" is a real finding.
 
 **Orthographic bias is tested, not asserted.** The corpus publisher also makes one of the systems we
-evaluate. The sharpest form of that concern is not training contamination — AfriSwitch is
-evaluation-only — but that the *reference spelling* is that publisher's house style: their annotators
+evaluate. The sharpest form of that concern is not training contamination - AfriSwitch is
+evaluation-only - but that the *reference spelling* is that publisher's house style: their annotators
 decided where Yoruba tone marks and Igbo hyphens go. A model from the same organisation would match
 those conventions by construction, independently of whether it misheard anything. We cannot eliminate
 that. We test it, by scoring under three normalisation regimes of increasing severity and reporting
@@ -98,7 +98,7 @@ scored on word error rate, so it is excluded from the accuracy comparison and na
 in the robustness section.
 
 **Known limitations, stated up front.** Numeral normalisation is applied to English number words
-only — Yoruba's vigesimal system is out of scope, which is symmetric across systems but leaves
+only - Yoruba's vigesimal system is out of scope, which is symmetric across systems but leaves
 residual variance. Whitespace tokenisation understates errors for agglutinative Bantu languages,
 where one written word carries several morphemes. Diacritic-insensitive scoring is meaningless for
 Amharic, which uses a syllabary, so that comparison is marked not-applicable rather than fudged.
@@ -112,31 +112,32 @@ not aspiration:
   closing one. Completing the wrong task is not something a user can undo in the moment.
 - A radio button whose options do not match what was said is left untouched and reported, with the
   available options named. The original implementation selected the first option and *then* returned
-  failure — silently putting a wrong answer into a civic form. Fixing that was the first change made
+  failure - silently putting a wrong answer into a civic form. Fixing that was the first change made
   to the form script, because a form that quietly misreports someone's circumstances to a government
   body is a worse outcome than a form that does not get filled.
 
 **Submission stays a deliberate act, enforced in code.** Filling fields and submitting are separate
-tools, and a plan that contains both has the submit stripped out before anything runs — replaced by a
+tools, and a plan that contains both has the submit stripped out before anything runs - replaced by a
 prompt to review first. The system prompt forbids the combination too, but a prompt is guidance;
 submitting answers a user has not seen to a government body is not recoverable, so the rule is also a
 function with tests around it.
 
 **The form can be read back before submitting.** "Read back what I've filled in" returns every
-question with its current value, spoken — "still blank" included, because a missed field is exactly
+question with its current value, spoken - "still blank" included, because a missed field is exactly
 what someone checking by ear needs to catch. Asking "what is this form asking me?" reads the
 questions themselves, which is the part that matters for someone facing an English-only government
 form they cannot comfortably read.
 
 **A choice of modality, not a replacement for agency.** The point is that someone can speak instead of
-typing if that is easier — not that a machine completes civic paperwork on their behalf while they
+typing if that is easier - not that a machine completes civic paperwork on their behalf while they
 watch. Everything Aalto does is visible: the transcript it heard is shown back, every task is listed
 with its outcome, and failures are reported in plain language rather than swallowed.
 
-**Speaking back is optional.** The mute control exists because a spoken reply is not always welcome —
-in an office, a clinic waiting room, a queue. Muting skips text-to-speech generation entirely rather
-than producing audio and discarding it, so the written answer still appears and nothing is spoken
-aloud that the user did not ask to hear.
+**Nothing speaks unless asked.** Replies appear as text; reading one aloud takes a deliberate press.
+A civic form is often filled in an office, a clinic waiting room or a queue, where a voice starting
+by itself is unwelcome and can disclose what someone is doing to whoever is next to them. Because
+nothing is generated until the button is pressed, an unspoken reply also costs no speech synthesis
+at all.
 
 ## What we would need before this touched real applicants
 
@@ -144,7 +145,7 @@ Stated plainly, because a hackathon prototype claiming civic readiness would its
 problem:
 
 - Transcription under contract with one provider, with data residency and retention terms
-  appropriate to government intake — not three vendors under their public terms.
+  appropriate to government intake - not three vendors under their public terms.
 - Accuracy measured on the specific forms and the specific population, not only on a research corpus.
 - A path for a user to reach a human when the agent cannot help, since a civic process that can only
   be completed through a working speech model has replaced one exclusion with another.

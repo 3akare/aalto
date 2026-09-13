@@ -10,7 +10,7 @@ sample1.meta.json   <- optional: { "languageCode": "yo", "description": "Yoruba-
 
 ## What to record (aim for 10-20 short clips, each 5-15 seconds)
 
-Cover the actual demo scenario — civic form filling + task follow-up — so the benchmark reflects
+Cover the actual demo scenario - civic form filling + task follow-up - so the benchmark reflects
 real usage, not generic sentences:
 
 - A few clips of natural code-switched Yoruba-English (or Pidgin-English) filling out form fields,
@@ -21,7 +21,7 @@ real usage, not generic sentences:
   bring my ID Friday")
 - Vary background noise/pace slightly to avoid an artificially clean benchmark
 
-Keep clips under 120 seconds (Intron's sync endpoint limit) — well under, ideally, since the demo
+Keep clips under 120 seconds (Intron's sync endpoint limit) - well under, ideally, since the demo
 scenario is short spoken commands anyway.
 
 Run `npm run benchmark` from `server/` once samples are in place.

@@ -2,7 +2,7 @@
  * One-time microphone permission grant.
  *
  * An offscreen document can USE the microphone but cannot prompt for it, and the
- * popup closes the moment it loses focus — which is exactly what happens when
+ * popup closes the moment it loses focus - which is exactly what happens when
  * Chrome's permission bubble appears. So the prompt has to come from an ordinary
  * extension page. Permission is granted to the extension's origin, so once this
  * page succeeds the offscreen recorder works from then on.

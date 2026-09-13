@@ -3,7 +3,7 @@
  *
  * This replaces MediaRecorder on the live path. MediaRecorder produces WebM/Opus,
  * which had to be recorded in full and then transcoded server-side before Sahara
- * could see any of it — so transcription could not start until the speaker
+ * could see any of it - so transcription could not start until the speaker
  * stopped. An AudioWorklet hands over raw samples as they arrive, which is what
  * makes streaming-while-speaking possible, and it deletes the transcode from the
  * live path entirely because the samples are already PCM.

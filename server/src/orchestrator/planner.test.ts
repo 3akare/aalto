@@ -33,7 +33,7 @@ describe("guardPlan", () => {
     assert.equal(out.filter((t) => t.tool === "fill_form_field").length, 2);
   });
 
-  it("allows a submit on its own — a deliberate, separate request", () => {
+  it("allows a submit on its own - a deliberate, separate request", () => {
     const out = guardPlan([task("t1", "submit_form")]);
     assert.deepEqual(
       out.map((t) => t.tool),

@@ -1,6 +1,6 @@
 /* global riIcon */
 /**
- * Popup — a view, not the engine.
+ * Popup - a view, not the engine.
  *
  * Two ways in, deliberately different:
  *   • the keyboard shortcut starts listening immediately, because pressing it IS
@@ -18,12 +18,13 @@ const recordBtn = document.getElementById("recordBtn");
 const recordHint = document.getElementById("recordHint");
 const wave = document.getElementById("wave");
 const loader = document.getElementById("loader");
-const speakerBtn = document.getElementById("speakerBtn");
 const settingsBtn = document.getElementById("settingsBtn");
 
 const reply = document.getElementById("reply");
 const heardEl = document.getElementById("heard");
 const answerEl = document.getElementById("answer");
+const answerRow = document.getElementById("answerRow");
+const speakBtn = document.getElementById("speakBtn");
 const tasksEl = document.getElementById("tasks");
 
 const settings = document.getElementById("settings");
@@ -41,27 +42,36 @@ loader.append(riIcon("loader", 26));
 recordBtn.append(riIcon("mic", 23));
 shortcutLink.append(document.createTextNode("Change shortcut"), riIcon("arrowUpRight", 12));
 
-function paintSpeaker(muted) {
-  speakerBtn.replaceChildren(riIcon(muted ? "volumeMute" : "volumeUp", 17));
-  speakerBtn.setAttribute("aria-pressed", String(muted));
-  speakerBtn.setAttribute("aria-label", muted ? "Unmute spoken replies" : "Mute spoken replies");
-}
+speakBtn.append(riIcon("volumeUp", 16));
+
+// Reading the reply aloud is a choice, not a default. Speaking unprompted is
+// unwelcome in an office, a clinic waiting room or a queue, which is where a
+// civic form is often filled in.
+speakBtn.addEventListener("click", async () => {
+  const text = answerEl.textContent.trim();
+  if (!text || speakBtn.classList.contains("playing")) return;
+  speakBtn.classList.add("playing");
+  try {
+    await chrome.runtime.sendMessage({ type: "SPEAK", text });
+  } finally {
+    speakBtn.classList.remove("playing");
+  }
+});
 
 // --- settings --------------------------------------------------------------
 
-// Sahara requires a language and its codes name code-switch PAIRS — "pcm" is
+// Sahara requires a language and its codes name code-switch PAIRS - "pcm" is
 // the Pidgin-English model, not a Pidgin-only one. There is deliberately no
 // "auto": sending no hint got the English model, which quietly anglicised
 // Pidgin into nonsense ("wetin be CAC" -> "Waiting the CAC").
 const DEFAULT_LANGUAGE = "pcm";
 
-chrome.storage.local.get(["serverUrl", "langHint", "muted", "apiKey"], (data) => {
+chrome.storage.local.get(["serverUrl", "langHint", "apiKey"], (data) => {
   if (data.serverUrl) serverUrlInput.value = data.serverUrl;
   if (data.apiKey) apiKeyInput.value = data.apiKey;
   langSelect.value = data.langHint || DEFAULT_LANGUAGE;
   if (!data.langHint) chrome.storage.local.set({ langHint: DEFAULT_LANGUAGE });
   paintLanguage();
-  paintSpeaker(data.muted === true);
 });
 
 /** Show the active pair on the stage; buried in settings, a wrong choice is
@@ -99,14 +109,6 @@ chrome.commands?.getAll((commands) => {
   if (bound?.shortcut) shortcutHint.textContent = bound.shortcut;
   // Unbound usually means it collided with one of Chrome's own shortcuts.
   else recordHint.hidden = true;
-});
-
-speakerBtn.addEventListener("click", async () => {
-  const { muted } = await chrome.storage.local.get("muted");
-  const next = muted !== true;
-  await chrome.storage.local.set({ muted: next });
-  paintSpeaker(next);
-  if (next) chrome.runtime.sendMessage({ type: "STOP_AUDIO" }).catch(() => {});
 });
 
 // --- waveform --------------------------------------------------------------
@@ -221,8 +223,10 @@ function render(s) {
   const isError = s.phase === "error";
   const headline = isError ? s.error : (s.summary ?? "");
   answerEl.textContent = headline ?? "";
-  answerEl.hidden = !headline;
+  answerRow.hidden = !headline;
   answerEl.classList.toggle("is-error", isError);
+  // Nothing to read aloud when the reply is an error message.
+  speakBtn.hidden = isError;
 
   // An answered task's text is already the headline; repeating it below would
   // say the same thing twice.

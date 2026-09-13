@@ -1,5 +1,5 @@
 /**
- * Aalto background service worker — the orchestrator.
+ * Aalto background service worker - the orchestrator.
  *
  * Everything that must outlive the popup lives here. The popup is only a view:
  * it starts and stops recording and renders state. If the user closes it
@@ -71,6 +71,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     case "GET_STATE":
       sendResponse({ state });
       return false;
+
+    case "SPEAK":
+      speak(message.text)
+        .then(() => sendResponse({ ok: true }))
+        .catch((err) => sendResponse({ ok: false, error: err.message }));
+      return true;
 
     case "STOP_AUDIO":
       sendToOffscreen({ type: "STOP_AUDIO" }).catch(() => {});
@@ -228,8 +234,8 @@ async function beginRecording() {
 /**
  * React to the server's side of the stream.
  *
- * Partials are rendered as they arrive. They are throwaway text — the committed
- * transcript replaces them — but showing words appearing changes how long the
+ * Partials are rendered as they arrive. They are throwaway text - the committed
+ * transcript replaces them - but showing words appearing changes how long the
  * wait feels even when it is exactly the same wait.
  */
 async function onStreamEvent(event) {
@@ -275,7 +281,7 @@ async function onStreamEvent(event) {
 
 /** Execute the browser half of a plan, then collect the spoken summary. */
 async function runPlan(plan) {
-  const settings = await chrome.storage.local.get(["serverUrl", "muted", "apiKey"]);
+  const settings = await chrome.storage.local.get(["serverUrl", "apiKey"]);
   const serverUrl = (settings.serverUrl || DEFAULT_SERVER).replace(/\/$/, "");
   const headers = settings.apiKey ? { "x-aalto-key": settings.apiKey } : {};
 
@@ -306,34 +312,34 @@ async function runPlan(plan) {
     if (!done.ok) throw new Error(await describeHttpError(done));
     const { summary } = await done.json();
 
-    // Show the answer the moment it exists; speech follows separately.
     await setState({ phase: "done", summary });
-    if (settings.muted !== true) speak(serverUrl, headers, summary).catch(() => {});
   } catch (err) {
     await setState({ phase: "error", error: err.message });
   }
 }
 
 /**
- * Fetch and play the spoken reply.
+ * Read a reply aloud, on request.
  *
- * Deliberately not awaited by the caller: the written answer is already on
- * screen, and text-to-speech takes a couple of seconds that nobody should spend
- * looking at a spinner for something already decided.
+ * Nothing speaks by itself. A civic form is often filled in an office, a clinic
+ * waiting room or a queue, where a voice starting unprompted is unwelcome, and
+ * skipping the call entirely also saves the quota and the couple of seconds
+ * text-to-speech costs.
  */
-async function speak(serverUrl, headers, text) {
+async function speak(text) {
+  if (!text) return;
+  const settings = await chrome.storage.local.get(["serverUrl", "apiKey"]);
+  const serverUrl = (settings.serverUrl || DEFAULT_SERVER).replace(/\/$/, "");
+  const headers = settings.apiKey ? { "x-aalto-key": settings.apiKey } : {};
+
   const res = await fetch(`${serverUrl}/api/speak`, {
     method: "POST",
     headers: { ...headers, "content-type": "application/json" },
     body: JSON.stringify({ text }),
   });
-  if (!res.ok) return;
+  if (!res.ok) throw new Error(await describeHttpError(res));
   const { audioUrl } = await res.json();
-  // Re-checked here so muting mid-flight beats a request made before it.
-  const { muted } = await chrome.storage.local.get("muted");
-  if (audioUrl && muted !== true) {
-    await sendToOffscreen({ type: "PLAY_AUDIO", url: audioUrl }).catch(() => {});
-  }
+  if (audioUrl) await sendToOffscreen({ type: "PLAY_AUDIO", url: audioUrl });
 }
 
 /**
@@ -362,19 +368,29 @@ async function executeBrowserTasks(tasks) {
     }
   };
 
-  const sequential = (async () => {
-    const out = [];
-    for (const task of formTasks) out.push(await runOne(task));
-    return out;
-  })();
+  // Anything that changes which tab is active has to finish before a form task
+  // asks "what is the active tab?". Running them concurrently meant a fill fired
+  // against the tab the user was on a moment ago - which has no content script,
+  // so it reported the form as unfillable while sitting right next to it.
+  const focusTasks = otherTasks.filter((t) => t.tool === "switch_tab");
+  const rest = otherTasks.filter((t) => t.tool !== "switch_tab");
 
-  const [formResults, otherResults] = await Promise.all([
-    sequential,
-    Promise.all(otherTasks.map(runOne)),
+  const focusResults = [];
+  for (const task of focusTasks) focusResults.push(await runOne(task));
+
+  // Everything else is independent: the remaining browser actions open tabs in
+  // the background, and form fields share one page so they go in order.
+  const [restResults, formResults] = await Promise.all([
+    Promise.all(rest.map(runOne)),
+    (async () => {
+      const out = [];
+      for (const task of formTasks) out.push(await runOne(task));
+      return out;
+    })(),
   ]);
 
   // Restore the order the user spoke them in.
-  const byId = new Map([...formResults, ...otherResults].map((r) => [r.id, r]));
+  const byId = new Map([...focusResults, ...restResults, ...formResults].map((r) => [r.id, r]));
   return tasks.map((t) => byId.get(t.id)).filter(Boolean);
 }
 
@@ -423,15 +439,45 @@ async function sendToActiveTab(action) {
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!activeTab?.id) throw new Error("no active tab to work with");
 
-  let res;
-  try {
-    res = await chrome.tabs.sendMessage(activeTab.id, { type: "FORM_ACTION", action });
-  } catch {
-    // The content script only runs on Google Forms pages.
-    throw new Error("that page doesn't look like a form I can fill");
-  }
+  const res = await messageContentScript(activeTab, { type: "FORM_ACTION", action });
   if (!res?.ok) throw new Error(res?.error ?? "the form field didn't match anything");
   return res.detail;
+}
+
+/**
+ * Talk to the content script, injecting it first if it is not there.
+ *
+ * Manifest content scripts are injected when a page loads, and reloading the
+ * extension does NOT re-inject them into tabs that are already open. So every
+ * extension reload silently breaks every form tab the user already had - the
+ * page looks identical and reports itself unfillable. Injecting on demand also
+ * covers a form opened before Aalto was installed.
+ */
+async function messageContentScript(tab, message) {
+  try {
+    return await chrome.tabs.sendMessage(tab.id, message);
+  } catch {
+    // Not there yet - try to put it there.
+  }
+
+  if (!/^https:\/\/docs\.google\.com\/forms\//.test(tab.url ?? "")) {
+    throw new Error("that page isn't a Google Form");
+  }
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ["content-forms.js"],
+    });
+  } catch (err) {
+    throw new Error(`couldn't reach that page (${err.message})`);
+  }
+
+  try {
+    return await chrome.tabs.sendMessage(tab.id, message);
+  } catch {
+    throw new Error("that page didn't respond - try reloading it");
+  }
 }
 
 /** Questions on the form in the active tab, or [] when there is no form there. */
@@ -439,10 +485,11 @@ async function activeFormLabels() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) return [];
-    const res = await chrome.tabs.sendMessage(tab.id, { type: "LIST_FIELDS" });
+    const res = await messageContentScript(tab, { type: "LIST_FIELDS" });
     return res?.labels ?? [];
   } catch {
-    // No content script on this page — not a form, and not an error.
+    // Not a form, or not reachable. Neither is an error - the planner simply
+    // works without the field list.
     return [];
   }
 }
@@ -457,12 +504,7 @@ async function reviewForm() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) throw new Error("no active tab to read");
 
-  let res;
-  try {
-    res = await chrome.tabs.sendMessage(tab.id, { type: "READ_FIELDS" });
-  } catch {
-    throw new Error("that page doesn't look like a form I can read");
-  }
+  const res = await messageContentScript(tab, { type: "READ_FIELDS" });
   const fields = res?.fields ?? [];
   if (fields.length === 0) throw new Error("I couldn't find any questions on this page");
 

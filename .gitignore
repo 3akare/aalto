@@ -17,3 +17,6 @@ benchmark/audio-samples/**
 
 # Generated UI previews for eyeballing the popup outside Chrome
 .preview/
+
+# Personal prep notes, not part of the deliverable
+.private/

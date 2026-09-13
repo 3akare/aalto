@@ -1,4 +1,4 @@
-# Aalto — Solution Description
+# Aalto - Solution Description
 
 **Category:** Legal & Public Services (civic service accessibility)
 
@@ -7,8 +7,8 @@
 ## Problem
 
 Nigeria's official language is English. Most Nigerians do not speak it the way official forms are
-written. What people actually speak is code-switched — Yoruba-English, Hausa-English, Igbo-English,
-Pidgin — switching language mid-sentence, often mid-clause, without noticing they are doing it.
+written. What people actually speak is code-switched - Yoruba-English, Hausa-English, Igbo-English,
+Pidgin - switching language mid-sentence, often mid-clause, without noticing they are doing it.
 
 Civic processes have moved onto digital forms: business name registration, permit applications,
 community surveys, aid intake, school enrolment. Those forms are English-only and text-only. That is
@@ -17,7 +17,7 @@ conversational rather than bureaucratic, and anyone filling a form on a phone in
 
 The gap is not that speech interfaces do not exist. It is that mainstream speech recognition is
 built and evaluated on monolingual speech. A system that transcribes clean English well can fail
-badly on a sentence that starts in Yoruba and finishes in English — and, worse, can fail *silently*,
+badly on a sentence that starts in Yoruba and finishes in English - and, worse, can fail *silently*,
 returning fluent-looking output that has dropped or mangled exactly the switched words. The
 AfriSwitch corpus exists because this is a measurable, unsolved problem across 12+ African
 languages; published baselines on it sit between 24% and 90% word error rate depending on language.
@@ -44,22 +44,22 @@ thrown into a search results page because they asked what a term meant. So Aalto
 
 - **Answers in place.** "What does CAC stand for?" returns a spoken and written answer in the panel.
   It only searches the web when the answer genuinely depends on something current or local that a
-  model should not state from memory — verified: "latest fuel price in Lagos" correctly routes to
+  model should not state from memory - verified: "latest fuel price in Lagos" correctly routes to
   search, "what does CAC stand for" does not.
 - **Works in the background.** Tabs it opens are opened *behind* what you are doing. Todoist tasks
   need no tab at all. You get "added, and opened the portal in a background tab", not a context switch.
 - **Fills Google Forms by voice**, matching what you said to the form's actual visible question text.
-  One sentence can fill several fields, and spoken digits land as digits — *"my phone is zero eight
+  One sentence can fill several fields, and spoken digits land as digits - *"my phone is zero eight
   zero three four five six seven eight nine zero"* becomes `08034567890`, which matters because civic
   forms are mostly phone numbers, NINs and dates.
 - **Reads the form back.** "What is this form asking me?" reads the questions; "read back what I've
   filled in" reads every question with its current value, blanks included. For someone facing an
   English-only government form they cannot comfortably read, this is the part that actually opens the
   door.
-- **Manages Todoist** — add, complete, update — matched fuzzily from a spoken description.
+- **Manages Todoist** - add, complete, update - matched fuzzily from a spoken description.
 
-It speaks its reply back through Intron TTS, and there is a mute toggle for when you want the answer
-on screen but not out loud.
+Replies arrive as text. A button reads one aloud through Intron TTS when that is wanted, which in an
+office or a waiting room usually is not.
 
 ## Why this is agentic, not a voice UI
 
@@ -69,7 +69,7 @@ Three specific properties, each of which is a design decision rather than a side
 business name registration, and remind me to file on Friday"* produces three tool calls from a single
 planning pass. Server-side work (Todoist) runs concurrently with `Promise.allSettled`; browser-side
 work is dispatched to the extension, where independent actions run in parallel and form fields run in
-order, because they share one page. One task failing never sinks the batch — you get the two that
+order, because they share one page. One task failing never sinks the batch - you get the two that
 worked and an honest account of the third.
 
 **The summary describes what happened, not what was dispatched.** The extension posts real per-task
@@ -77,13 +77,13 @@ outcomes back to the server, which produces one spoken sentence from them. A tas
 
 **It refuses to submit what you have not seen.** A plan containing both field fills and a submit has
 the submit removed before anything executes, and the user is told to review first. This is enforced
-as a function with tests, not only as a line in the system prompt — a civic form submitted with wrong
+as a function with tests, not only as a line in the system prompt - a civic form submitted with wrong
 answers is not something the applicant can take back.
 
 **It asks rather than guesses, where guessing is unrecoverable.** An ambiguous Todoist match ("the ID
 card thing" matching two open tasks) returns a clarifying question instead of closing one. A radio
 button on a form whose options do not match what you said is left alone and reported, rather than
-being set to the first option — which is what the original implementation did, silently, while
+being set to the first option - which is what the original implementation did, silently, while
 returning failure.
 
 ## Architecture
@@ -107,21 +107,21 @@ popup                                     ├─ summarise ───────
 ### Key technical decisions
 
 **Streaming STT, not the sync endpoint.** Intron's `/file/v1/upload/sync` rejects anything longer
-than about five seconds on our account with `"insufficient balance to process the file"` —
+than about five seconds on our account with `"insufficient balance to process the file"` -
 reproducibly, on both 176KB and 94KB encodings of the same clip, while the streaming session
 handshake reports a healthy `credit_balance`. Spoken commands routinely exceed five seconds and
 AfriSwitch utterances average about twelve, so the sync path is unusable regardless of the error
 message. Everything runs over the WebSocket streaming API.
 
 **Recording lives in an offscreen document.** Chrome destroys an extension popup the moment it loses
-focus — which is precisely when Aalto opens or switches a tab. Recording in the popup meant recording
+focus - which is precisely when Aalto opens or switches a tab. Recording in the popup meant recording
 died during almost every command it exists to run. An offscreen document survives; a service worker
 cannot do the job either, because it has no DOM and therefore no `getUserMedia` and no `Audio`.
 
 **Commands end on silence, not on a button.** The offscreen worker measures input RMS, commits after
 ~1.1s of quiet following speech, gives up after 4s of nothing, and caps an utterance at 25s. Pressing
 the shortcut *is* the request to talk, so the popup it opens is already listening. Opening the popup
-by hand shows a record button and waits — a window that started recording because you glanced at it
+by hand shows a record button and waits - a window that started recording because you glanced at it
 would be a different product.
 
 **Gemini for planning, with a tool schema.** The transcript may itself be code-switched and carry ASR
@@ -134,7 +134,7 @@ WAV. On the live path this fixes a real bug (the extension records WebM/Opus, wh
 
 **Form matching is containment-biased.** Google Forms does not expose clean `label for=""` bindings,
 so the content script matches spoken labels against rendered question text. Normalising by the
-*larger* token set — the obvious implementation, and the original one — meant a spoken "name" scored
+*larger* token set - the obvious implementation, and the original one - meant a spoken "name" scored
 0.17 against "What is your full legal name?" and fell below threshold; short spoken labels failed
 against verbose questions as a rule. Dividing by the smaller set asks the right question: is what
 they said contained in this question?

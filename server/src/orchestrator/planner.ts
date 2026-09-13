@@ -79,7 +79,7 @@ export class Planner {
     const contextLines: string[] = [];
     if (context.openTabs?.length) {
       contextLines.push(
-        `Open tabs:\n${context.openTabs.map((t, i) => `  ${i + 1}. ${t.title} — ${t.url}`).join("\n")}`
+        `Open tabs:\n${context.openTabs.map((t, i) => `  ${i + 1}. ${t.title} - ${t.url}`).join("\n")}`
       );
     }
     if (context.formLabels?.length) {
@@ -160,7 +160,7 @@ export function guardPlan(tasks: PlannedTask[]): PlannedTask[] {
       tool: "clarify",
       input: {
         question:
-          'I\'ve filled that in but not submitted it — say "read it back" to check the answers, ' +
+          'I\'ve filled that in but not submitted it - say "read it back" to check the answers, ' +
           'then "submit" when you\'re happy.',
       },
     },

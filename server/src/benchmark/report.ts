@@ -114,7 +114,7 @@ export function renderReport(r: ReportInput): string {
     const [best, next] = ranked;
     out.push(
       `| ${label} | **${name(best.providerId)}** | ${fmt(best.value)} | 1st of ${n} | ` +
-        `${next ? `${name(next.providerId)} ${fmt(next.value)}` : "—"} |`
+        `${next ? `${name(next.providerId)} ${fmt(next.value)}` : "-"} |`
     );
   };
 
@@ -176,7 +176,7 @@ export function renderReport(r: ReportInput): string {
   out.push("");
   out.push(
     "> Selection is by deterministic content hash of `seed|language|filename`, not a seeded " +
-      "PRNG over row order — reproducible from the seed alone and independently verifiable " +
+      "PRNG over row order - reproducible from the seed alone and independently verifiable " +
       "with `sha256sum`. The manifest was committed **before** any API call was made; that " +
       "commit timestamp is the pre-registration record."
   );
@@ -203,7 +203,7 @@ export function renderReport(r: ReportInput): string {
   out.push("");
   out.push(
     "We address (3) directly by scoring under three normalisation regimes of increasing " +
-      "severity and testing whether the model ranking is invariant — see T5. We cannot address " +
+      "severity and testing whether the model ranking is invariant - see T5. We cannot address " +
       "(1) or (2) with the resources available and do not claim to have."
   );
   out.push("");
@@ -223,24 +223,24 @@ export function renderReport(r: ReportInput): string {
     "| Post-processing | Raw-ASR condition for all: Intron `use_disable_llm_corrections=TRUE`, AssemblyAI `punctuate`/`format_text` false, Gemini transcription mode `verbatim` | Gemini may apply corrections not exposed by the verbatim flag |"
   );
   out.push(
-    "| Audio | Decoded once to 16 kHz mono PCM16 WAV (the corpus's native rate — no resampling); byte-identical bytes to every vendor, SHA-256 recorded | None known |"
+    "| Audio | Decoded once to 16 kHz mono PCM16 WAV (the corpus's native rate - no resampling); byte-identical bytes to every vendor, SHA-256 recorded | None known |"
   );
   out.push(
-    "| Retries | One policy for all: max 2, only on 429/5xx/timeout, never on 4xx; retries counted and reported | — |"
+    "| Retries | One policy for all: max 2, only on 429/5xx/timeout, never on 4xx; retries counted and reported | - |"
   );
   out.push(
     "| Failures | Primary tables on the complete-case intersection | Drop-out sensitivity reported in T7 |"
   );
   out.push(
-    "| Scheduling | Round-robin by utterance, so an incident hits every system equally | — |"
+    "| Scheduling | Round-robin by utterance, so an incident hits every system equally | - |"
   );
   out.push(
-    "| Scoring code | No provider-conditional logic — verify with `grep -riE 'intron\\|assembly\\|gemini\\|sahara' src/benchmark/{normalize,align,metrics,stats}.ts` (no matches) | — |"
+    "| Scoring code | No provider-conditional logic - verify with `grep -riE 'intron\\|assembly\\|gemini\\|sahara' src/benchmark/{normalize,align,metrics,stats}.ts` (no matches) | - |"
   );
   out.push("");
 
   // --- T3 headline -----------------------------------------------------------
-  out.push(`## T3 · Headline — CORE-${r.coreLanguages.length} corpus WER`);
+  out.push(`## T3 · Headline - CORE-${r.coreLanguages.length} corpus WER`);
   out.push("");
   out.push(
     "| System | Track A (diacritic-sensitive) | Track B (diacritic-insensitive) | Diacritic tax | Macro-avg (A) | Coverage |"
@@ -253,9 +253,9 @@ export function renderReport(r: ReportInput): string {
   }
   out.push("");
   out.push(
-    "> **Diacritic tax** = Track A WER − Track B WER: how much of a system's apparent error is " +
+    "> **Diacritic tax** = Track A WER - Track B WER: how much of a system's apparent error is " +
       "orthographic convention rather than recognition. A near-zero tax for one vendor while " +
-      "others pay 8–15 points would quantify a house-style advantage rather than merely " +
+      "others pay 8-15 points would quantify a house-style advantage rather than merely " +
       "suspecting one."
   );
   out.push("");
@@ -264,7 +264,7 @@ export function renderReport(r: ReportInput): string {
   out.push("## T4 · Paired differences");
   out.push("");
   out.push(
-    "| A | B | ΔWER (A − B) | 95% paired CI | p (permutation) | p (Holm) | A wins | B wins | Ties |"
+    "| A | B | ΔWER (A - B) | 95% paired CI | p (permutation) | p (Holm) | A wins | B wins | Ties |"
   );
   out.push("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
   for (const p of r.pairwise) {
@@ -277,8 +277,8 @@ export function renderReport(r: ReportInput): string {
     "> **Overlapping confidence intervals in T3 do not imply the absence of a significant " +
       "difference.** Every system transcribes the same audio, so utterance difficulty dominates " +
       "the variance and cancels in the paired difference. Read this table, not the overlap in T3. " +
-      "The resampling unit is the utterance (never the word — errors within an utterance are " +
-      "strongly correlated). Holm–Bonferroni is applied within the family of pairwise tests on " +
+      "The resampling unit is the utterance (never the word - errors within an utterance are " +
+      "strongly correlated). Holm-Bonferroni is applied within the family of pairwise tests on " +
       "the pooled primary metric."
   );
   out.push("");
@@ -323,23 +323,23 @@ export function renderReport(r: ReportInput): string {
   }
   out.push("");
   out.push(
-    "> **Switch penalty Δ** = SPER − non-SPER, the extra error rate incurred at a language " +
+    "> **Switch penalty Δ** = SPER - non-SPER, the extra error rate incurred at a language " +
       "boundary specifically. It is the most code-switching-specific number here.\n" +
       "> **Ratio EN/matrix** diagnoses failure *mode*: a system that force-decodes everything " +
       "into English shows a low ratio; one that drops the embedded English shows a high one.\n" +
       "> **CMI slope** is the length-weighted OLS slope of per-utterance WER on the corpus's own " +
-      "code-mixing index — how fast a system degrades as mixing intensifies, as distinct from " +
+      "code-mixing index - how fast a system degrades as mixing intensifies, as distinct from " +
       "simply being worse overall."
   );
   out.push("");
 
   // --- Entity accuracy -------------------------------------------------------
-  out.push("## T6a · Entity error — names and numbers");
+  out.push("## T6a · Entity error - names and numbers");
   out.push("");
   out.push(
     "A transcript can post a respectable word error rate and still be useless for " +
-      "filling in a form, because the tokens that matter — a name, an age, a phone " +
-      "number, a dosage — are a handful among hundreds of function words. Scored " +
+      "filling in a form, because the tokens that matter - a name, an age, a phone " +
+      "number, a dosage - are a handful among hundreds of function words. Scored " +
       "separately, they ask the question the product actually cares about."
   );
   out.push("");
@@ -353,7 +353,7 @@ export function renderReport(r: ReportInput): string {
   out.push("");
   out.push(
     "> Numbers are digit runs surviving numeral folding. Names are capitalised " +
-      "non-initial tokens — the standard heuristic once case is the only signal " +
+      "non-initial tokens - the standard heuristic once case is the only signal " +
       "left, and a crude one, which is why the denominators are published here " +
       "rather than only the rates. It is script-dependent: Ge'ez has no case, so " +
       "Amharic contributes no name tokens at all and its column is an absence of " +
@@ -374,7 +374,7 @@ export function renderReport(r: ReportInput): string {
   out.push("");
   out.push(
     "> Latency from this pass is measured under concurrency and is therefore partly a " +
-      "measurement of our own queueing, not purely of vendor speed — the serial latency pass is " +
+      "measurement of our own queueing, not purely of vendor speed - the serial latency pass is " +
       "the figure to cite. Batch-API latency is also a different construct from the streaming " +
       "path the product actually uses, so these numbers are directional only."
   );
@@ -390,7 +390,7 @@ export function renderReport(r: ReportInput): string {
     const cells = ids.map((id) => {
       const row = r.perLanguage.find((x) => x.providerId === id && x.language === lang);
       if (!row) return "n/a";
-      if (!row.supported) return "— ¹";
+      if (!row.supported) return "- ¹";
       return ci(row.wer);
     });
     const n = r.perLanguage.find((x) => x.language === lang)?.n ?? 0;
@@ -414,7 +414,7 @@ export function renderReport(r: ReportInput): string {
     "- Numeral canonicalisation is applied to English number words only; matrix-language numerals are scored as written. Symmetric across systems, but it leaves residual variance."
   );
   out.push(
-    "- Whitespace tokenisation understates errors for agglutinative Bantu languages (Zulu, Kinyarwanda, Luganda), where one orthographic word carries several morphemes — read CER alongside WER for those."
+    "- Whitespace tokenisation understates errors for agglutinative Bantu languages (Zulu, Kinyarwanda, Luganda), where one orthographic word carries several morphemes - read CER alongside WER for those."
   );
   out.push(
     "- Track B is a no-op for Amharic: Ge'ez is a syllabary with no combining marks, so the diacritic tax is undefined there."
