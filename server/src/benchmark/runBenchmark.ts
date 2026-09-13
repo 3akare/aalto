@@ -27,6 +27,7 @@ const SAMPLES_DIR = path.join(ROOT, "benchmark/audio-samples");
 const MANIFEST_DIR = path.join(ROOT, "benchmark/manifest");
 const RESULTS_DIR = path.join(ROOT, "benchmark/results");
 const CACHE_DIR = path.join(ROOT, "benchmark/cache/responses");
+const DOCS_DIR = path.join(ROOT, "docs");
 
 const TRACKS: Track[] = ["A", "B", "C"];
 const BOOTSTRAP_ITERATIONS = 10_000;
@@ -363,8 +364,13 @@ async function main(): Promise<void> {
   const markdown = renderReport(input);
   writeFileSync(path.join(RESULTS_DIR, `report-${stamp}.md`), markdown);
   writeFileSync(path.join(RESULTS_DIR, "latest.md"), markdown);
+  // The report IS a required submission document, so write it where the other
+  // submission documents live rather than making someone copy it across.
+  mkdirSync(DOCS_DIR, { recursive: true });
+  writeFileSync(path.join(DOCS_DIR, "BENCHMARK_REPORT.md"), markdown);
 
   console.log(`\n[benchmark] wrote ${path.join(RESULTS_DIR, "latest.md")}`);
+  console.log(`[benchmark] wrote ${path.join(DOCS_DIR, "BENCHMARK_REPORT.md")}`);
 }
 
 function macroAverage(counts: ErrorCounts[], strata: string[], languages: string[]): number {
