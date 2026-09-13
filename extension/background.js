@@ -311,6 +311,28 @@ async function runPlan(plan) {
 }
 
 /**
+ * Fetch and play the spoken reply.
+ *
+ * Deliberately not awaited by the caller: the written answer is already on
+ * screen, and text-to-speech takes a couple of seconds that nobody should spend
+ * looking at a spinner for something already decided.
+ */
+async function speak(serverUrl, headers, text) {
+  const res = await fetch(`${serverUrl}/api/speak`, {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) return;
+  const { audioUrl } = await res.json();
+  // Re-checked here so muting mid-flight beats a request made before it.
+  const { muted } = await chrome.storage.local.get("muted");
+  if (audioUrl && muted !== true) {
+    await sendToOffscreen({ type: "PLAY_AUDIO", url: audioUrl }).catch(() => {});
+  }
+}
+
+/**
  * Run the browser-side tasks.
  *
  * Form fields go one at a time and in order - they target a single page and

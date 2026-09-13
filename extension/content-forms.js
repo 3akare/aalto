@@ -127,6 +127,44 @@ function listQuestionLabels() {
   return getQuestionContainers().map(headingOf).filter(Boolean);
 }
 
+/**
+ * Every question and whatever is currently entered against it.
+ *
+ * This is what makes review-before-submit possible: someone filling a government
+ * form by voice has no way to check what actually landed in each field unless it
+ * is read back to them.
+ */
+function readFields() {
+  return getQuestionContainers()
+    .map((container) => {
+      const label = headingOf(container);
+      return label ? { label, value: currentValue(container) } : null;
+    })
+    .filter(Boolean);
+}
+
+/** The entered value for one question, or "" when it is still blank. */
+function currentValue(container) {
+  const text = container.querySelector('input[type="text"], input[type="date"], textarea');
+  if (text) return text.value.trim();
+
+  const radio = container.querySelector('[role="radio"][aria-checked="true"]');
+  if (radio) return (radio.getAttribute("aria-label") || "").trim();
+
+  const ticked = Array.from(container.querySelectorAll('[role="checkbox"][aria-checked="true"]'))
+    .map((c) => (c.getAttribute("aria-label") || "").trim())
+    .filter(Boolean);
+  if (ticked.length > 0) return ticked.join(", ");
+
+  const listbox = container.querySelector('[role="listbox"]');
+  if (listbox) {
+    const chosen = (listbox.getAttribute("aria-label") || listbox.textContent || "").trim();
+    // Google renders the placeholder as the label until something is picked.
+    return /^(choose|select)$/i.test(chosen) ? "" : chosen;
+  }
+  return "";
+}
+
 function findBestMatchingQuestion(spokenLabel) {
   const scored = getQuestionContainers()
     .map((container) => ({ container, text: headingOf(container) }))
