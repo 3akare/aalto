@@ -97,10 +97,11 @@ interface Scored {
 
 async function main(): Promise<void> {
   const tier = process.argv[2] ?? "smoke";
-  const manifestPath = path.join(MANIFEST_DIR, `afriswitch-sample-${tier}.json`);
+  const datasetKey = (process.argv[3] ?? "afriswitch").toLowerCase();
+  const manifestPath = path.join(MANIFEST_DIR, `${datasetKey}-${tier}.json`);
   if (!existsSync(manifestPath)) {
     throw new Error(
-      `No manifest at ${manifestPath}. Run \`npm run corpus -- ${tier}\` first, and COMMIT the ` +
+      `No manifest at ${manifestPath}. Run \`npm run corpus -- ${tier} ${datasetKey}\` first, and COMMIT the ` +
         `manifest before running the benchmark - that commit is the pre-registration record.`
     );
   }

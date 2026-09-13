@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import ffmpegPath from "ffmpeg-static";
 
 /**
@@ -21,18 +24,39 @@ export interface TranscodeOptions {
   inputFormat?: string;
   sampleRate?: number;
   timeoutMs?: number;
+  /**
+   * Stage the input through a temp file instead of stdin.
+   *
+   * ffmpeg cannot seek on a pipe. Some corpus WAVs carry malformed headers - one
+   * declaring a 1.4GB length, another an invalid format code - and on a pipe
+   * ffmpeg trusts the header, stops early and exits 0, silently yielding a
+   * one-second file from a four-minute recording. Given a real file it can seek,
+   * recover the true extent, and decode the whole thing.
+   */
+  viaFile?: boolean;
 }
 
 export async function toWav16kMono(input: Buffer, opts: TranscodeOptions = {}): Promise<Buffer> {
-  const { inputFormat, sampleRate = 16_000, timeoutMs = 60_000 } = opts;
+  const { inputFormat, sampleRate = 16_000, timeoutMs = 60_000, viaFile = false } = opts;
+
+  let scratch: string | null = null;
+  let inputPath = "pipe:0";
+  if (viaFile) {
+    scratch = mkdtempSync(path.join(tmpdir(), "aalto-"));
+    inputPath = path.join(scratch, "in");
+    writeFileSync(inputPath, input);
+  }
 
   const args = [
     "-hide_banner",
     "-loglevel",
     "error",
+    // Trust the stream over the container header, so a wrong declared length
+    // does not cut the decode short.
+    ...(viaFile ? ["-ignore_length", "1"] : []),
     ...(inputFormat ? ["-f", inputFormat] : []),
     "-i",
-    "pipe:0",
+    inputPath,
     "-vn",
     "-ac",
     "1",
@@ -44,6 +68,10 @@ export async function toWav16kMono(input: Buffer, opts: TranscodeOptions = {}): 
     "wav",
     "pipe:1",
   ];
+
+  const cleanup = () => {
+    if (scratch) rmSync(scratch, { recursive: true, force: true });
+  };
 
   return new Promise<Buffer>((resolve, reject) => {
     const proc = spawn(FFMPEG, args, { stdio: ["pipe", "pipe", "pipe"] });
@@ -62,6 +90,7 @@ export async function toWav16kMono(input: Buffer, opts: TranscodeOptions = {}): 
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      cleanup();
       reject(err);
     };
 
@@ -73,6 +102,7 @@ export async function toWav16kMono(input: Buffer, opts: TranscodeOptions = {}): 
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      cleanup();
       if (code !== 0) {
         reject(new Error(`ffmpeg exited ${code}: ${Buffer.concat(errOut).toString().trim()}`));
         return;
@@ -88,7 +118,8 @@ export async function toWav16kMono(input: Buffer, opts: TranscodeOptions = {}): 
     // EPIPE here means ffmpeg rejected the input and already exited; the close
     // handler reports the real reason from stderr, so swallow it.
     proc.stdin.on("error", () => {});
-    proc.stdin.end(input);
+    if (viaFile) proc.stdin.end();
+    else proc.stdin.end(input);
   });
 }
 

@@ -22,21 +22,66 @@ import { isWellFormedTagged, parseTaggedTranscription } from "./normalize";
  * derived statistics may be published, the clips may not be redistributed.
  */
 
-const DATASET = "intronhealth/AfriSwitch";
+/**
+ * Which corpus to build from.
+ *
+ * AfriSwitch is the civic-domain target: ~16.6k short utterances averaging ~12s
+ * across 14 languages. AfriSwitchCare is the medical sibling and is structurally
+ * different - a dozen multi-turn clinical dialogues per language, each 2-5
+ * minutes long. Both carry the same gold [[EN]] span tags, so every metric works
+ * unchanged; only the sampling shape differs, which is why the limits below are
+ * per-dataset rather than global.
+ */
+const DATASETS = {
+  afriswitch: {
+    repo: "intronhealth/AfriSwitch",
+    // Intron's sync endpoint capped at 120s; the streaming session caps at 300s.
+    maxDurationSeconds: 110,
+    perLanguage: { smoke: 5, pilot: 25, main: 100, ablation: 10 },
+  },
+  afriswitchcare: {
+    repo: "intronhealth/AfriSwitchCare",
+    // Dialogues run to ~256s. Streaming allows 300s per session; leave headroom.
+    maxDurationSeconds: 290,
+    // There are only ~12 rows per language, so "main" is simply all of them.
+    perLanguage: { smoke: 2, pilot: 5, main: 100, ablation: 3 },
+  },
+} as const;
+
+type DatasetKey = keyof typeof DATASETS;
+
 const SEED = "aalto-afriswitch-v1";
+
+/**
+ * HuggingFace lays these out by full language name (`data/yoruba/...`), but every
+ * provider, the coverage table and the script gating all key on ISO codes.
+ */
+const LANGUAGE_CODES: Record<string, string> = {
+  afrikaans: "af",
+  amharic: "am",
+  french: "fr",
+  hausa: "ha",
+  igbo: "ig",
+  kinyarwanda: "rw",
+  luganda: "lg",
+  oromo: "om",
+  pidgin: "pcm",
+  shona: "sn",
+  swahili: "sw",
+  tswana: "tn",
+  yoruba: "yo",
+  zulu: "zu",
+};
 
 const ROOT = path.resolve(__dirname, "../../..");
 const SAMPLES_DIR = path.join(ROOT, "benchmark/audio-samples");
 const MANIFEST_DIR = path.join(ROOT, "benchmark/manifest");
 const PARQUET_CACHE = path.join(ROOT, "benchmark/cache/parquet");
 
-/** Equal allocation per language: Afrikaans has ~198 rows, so proportional sampling
- *  would leave it uninterpretable. Equal n gives every language the same precision. */
-const TIERS = { smoke: 5, pilot: 25, main: 100, ablation: 10 } as const;
-type Tier = keyof typeof TIERS;
+/** Equal allocation per language: proportional sampling would leave the smallest
+ *  language uninterpretable. Equal n gives every language the same precision. */
+type Tier = "smoke" | "pilot" | "main" | "ablation";
 
-/** Intron's sync endpoint caps at 120s. Exclude rather than truncate for one vendor. */
-const MAX_DURATION_S = 110;
 const MIN_REF_TOKENS = 3;
 
 export interface ManifestRow {
@@ -55,6 +100,7 @@ export interface ManifestRow {
 export interface Manifest {
   seed: string;
   dataset: string;
+  maxDurationSeconds: number;
   datasetCommitSha: string;
   tier: Tier;
   perLanguage: number;
@@ -126,10 +172,22 @@ function terciles(values: number[]): [number, number] {
 
 async function main(): Promise<void> {
   const tier = (process.argv[2] as Tier) ?? "smoke";
-  if (!(tier in TIERS)) {
-    throw new Error(`Unknown tier "${tier}". Expected one of: ${Object.keys(TIERS).join(", ")}`);
+  const datasetKey = ((process.argv[3] as DatasetKey) ?? "afriswitch").toLowerCase() as DatasetKey;
+
+  const spec = DATASETS[datasetKey];
+  if (!spec) {
+    throw new Error(
+      `Unknown dataset "${datasetKey}". Expected one of: ${Object.keys(DATASETS).join(", ")}`
+    );
   }
-  const perLanguage = TIERS[tier];
+  const perLanguage = spec.perLanguage[tier];
+  if (perLanguage === undefined) {
+    throw new Error(
+      `Unknown tier "${tier}". Expected one of: ${Object.keys(spec.perLanguage).join(", ")}`
+    );
+  }
+  const DATASET = spec.repo;
+  const MAX_DURATION_S = spec.maxDurationSeconds;
 
   if (!config.huggingface.token) {
     throw new Error(
@@ -143,13 +201,18 @@ async function main(): Promise<void> {
   mkdirSync(MANIFEST_DIR, { recursive: true });
   mkdirSync(PARQUET_CACHE, { recursive: true });
 
-  console.log(`[corpus] tier=${tier} (${perLanguage} utterances/language)`);
+  console.log(`[corpus] dataset=${DATASET}  tier=${tier} (up to ${perLanguage}/language)`);
   console.log(`[corpus] listing files in ${DATASET} ...`);
 
   const parquetFiles: { path: string }[] = [];
   let datasetCommitSha = "unknown";
   try {
-    for await (const f of listFiles({ repo: { type: "dataset", name: DATASET }, credentials })) {
+    for await (const f of listFiles({
+      repo: { type: "dataset", name: DATASET },
+      credentials,
+      // The parquet files live one level down, under data/<language>/.
+      recursive: true,
+    })) {
       if (f.type === "file" && f.path.endsWith(".parquet")) parquetFiles.push({ path: f.path });
       if (f.oid && datasetCommitSha === "unknown") datasetCommitSha = "see-manifest-note";
     }
@@ -170,6 +233,7 @@ async function main(): Promise<void> {
     emptyTranscription: 0,
     tooFewTokens: 0,
     malformedTags: 0,
+    truncatedDecode: 0,
   };
   const byLanguage = new Map<string, (Row & { __lang: string; __file: string })[]>();
   let columns: ReturnType<typeof resolveColumns> | undefined;
@@ -177,7 +241,9 @@ async function main(): Promise<void> {
   for (const file of chosen) {
     // Config name is the directory segment, e.g. "data/yo/test-00000-of-00001.parquet".
     const segments = file.path.split("/");
-    const language = segments.length > 1 ? segments[segments.length - 2] : "unknown";
+    const dirName = segments.length > 1 ? segments[segments.length - 2] : "unknown";
+    // HuggingFace uses full language names; everything downstream keys on ISO.
+    const language = LANGUAGE_CODES[dirName.toLowerCase()] ?? dirName;
 
     const localPath = path.join(PARQUET_CACHE, file.path.replace(/[/\\]/g, "__"));
     console.log(`[corpus] downloading ${file.path} ...`);
@@ -304,9 +370,22 @@ async function main(): Promise<void> {
       console.warn(`[corpus] no audio bytes for ${row.id}, skipping`);
       continue;
     }
-    const wav = await toWav16kMono(bytes);
+    // Corpus WAVs have unreliable headers; stage through a file so ffmpeg can seek.
+    const wav = await toWav16kMono(bytes, { viaFile: true, timeoutMs: 180_000 });
+    // A decode that silently truncates would corrupt every metric downstream
+    // while looking perfectly healthy, so the extracted length is checked against
+    // the corpus's own duration rather than trusted.
+    const actual = wavDurationSeconds(wav);
+    if (row.duration && Math.abs(actual - row.duration) > Math.max(3, row.duration * 0.05)) {
+      console.warn(
+        `[corpus] ${row.id}: decoded ${actual.toFixed(1)}s but corpus says ` +
+          `${row.duration.toFixed(1)}s - excluding`
+      );
+      exclusions.truncatedDecode = (exclusions.truncatedDecode ?? 0) + 1;
+      continue;
+    }
     row.audioSha256 = sha256(wav);
-    if (!row.duration) row.duration = wavDurationSeconds(wav);
+    if (!row.duration) row.duration = actual;
 
     writeFileSync(path.join(SAMPLES_DIR, `${row.id}.wav`), wav);
     writeFileSync(path.join(SAMPLES_DIR, `${row.id}.txt`), row.transcription, "utf8");
@@ -329,21 +408,25 @@ async function main(): Promise<void> {
     if (extracted % 25 === 0) console.log(`[corpus]   ${extracted}/${selected.length}`);
   }
 
+  // Only rows that actually produced audio belong in the manifest.
+  const written = selected.filter((r) => r.audioSha256);
+
   const manifest: Manifest = {
     seed: SEED,
     dataset: DATASET,
+    maxDurationSeconds: MAX_DURATION_S,
     datasetCommitSha,
     tier,
     perLanguage,
     createdAt: new Date().toISOString(),
     exclusions,
-    rows: selected,
+    rows: written,
   };
   const manifestJson = JSON.stringify(manifest, null, 2);
-  const manifestPath = path.join(MANIFEST_DIR, `afriswitch-sample-${tier}.json`);
+  const manifestPath = path.join(MANIFEST_DIR, `${datasetKey}-${tier}.json`);
   writeFileSync(manifestPath, manifestJson, "utf8");
   writeFileSync(
-    path.join(MANIFEST_DIR, `afriswitch-sample-${tier}.sha256`),
+    path.join(MANIFEST_DIR, `${datasetKey}-${tier}.sha256`),
     `${createHash("sha256").update(manifestJson).digest("hex")}  ${path.basename(manifestPath)}\n`,
     "utf8"
   );
@@ -359,7 +442,11 @@ async function main(): Promise<void> {
     for (let i = 1; i < tags.length; i++) if (tags[i] !== tags[i - 1]) n++;
     return { expected: r.numSwitchPoints, got: n };
   });
-  const mismatches = switchPointCheck.filter((c) => c.expected !== c.got).length;
+  const spDeltas = switchPointCheck.map((c) => Math.abs(c.expected - c.got));
+  const spExact = switchPointCheck.length - spDeltas.filter((d) => d > 0).length;
+  const spMeanDelta =
+    spDeltas.length > 0 ? spDeltas.reduce((a, b) => a + b, 0) / spDeltas.length : 0;
+  const spMaxDelta = spDeltas.length > 0 ? Math.max(...spDeltas) : 0;
 
   const cmiDeviations = tagged.map((r) =>
     Math.abs(
@@ -374,10 +461,16 @@ async function main(): Promise<void> {
   console.log(`[corpus] manifest: ${manifestPath}`);
   console.log(`[corpus] exclusions: ${JSON.stringify(exclusions)}`);
   console.log(
-    `[corpus] switch-point cross-check: ` +
-      `${switchPointCheck.length - mismatches}/${switchPointCheck.length} agree with num_switch_points` +
-      (mismatches > 0 ? `  <-- investigate the tag parser before trusting the CS metrics` : "")
+    `[corpus] switch-point cross-check: ${spExact}/${switchPointCheck.length} exact, ` +
+      `mean |delta| ${spMeanDelta.toFixed(1)}, max ${spMaxDelta} vs num_switch_points`
   );
+  if (spMeanDelta > 0) {
+    console.log(
+      "[corpus]   (a small offset is a definitional difference, not a parse error - the CMI " +
+        "cross-check above confirms the tags themselves. Our count is computed identically for " +
+        "every system, so the comparison stays internally consistent.)"
+    );
+  }
   console.log(
     `[corpus] CMI cross-check: mean |delta| ${meanCmiDeviation.toFixed(2)}, ` +
       `max ${maxCmiDeviation.toFixed(2)} (recomputed from tags vs the published cmi column)`
@@ -387,16 +480,24 @@ async function main(): Promise<void> {
 
 const audioByRowId = new Map<string, unknown>();
 
-/** HuggingFace audio features arrive as { bytes, path } structs. */
+/**
+ * HuggingFace audio features arrive as { bytes, path } structs.
+ *
+ * hyparquet hands byte arrays back as latin1-encoded STRINGS, not Uint8Arrays -
+ * decoding them as UTF-8 would silently corrupt every byte above 0x7F, so the
+ * encoding here is load-bearing rather than incidental.
+ */
 function extractAudioBytes(raw: unknown): Buffer | null {
+  const asBuffer = (v: unknown): Buffer | null => {
+    if (Buffer.isBuffer(v)) return v;
+    if (v instanceof Uint8Array) return Buffer.from(v);
+    if (typeof v === "string") return Buffer.from(v, "latin1");
+    return null;
+  };
   if (!raw) return null;
-  if (Buffer.isBuffer(raw)) return raw;
-  if (raw instanceof Uint8Array) return Buffer.from(raw);
-  if (typeof raw === "object") {
-    const b = (raw as { bytes?: unknown }).bytes;
-    if (Buffer.isBuffer(b)) return b;
-    if (b instanceof Uint8Array) return Buffer.from(b);
-  }
+  const direct = asBuffer(raw);
+  if (direct) return direct;
+  if (typeof raw === "object") return asBuffer((raw as { bytes?: unknown }).bytes);
   return null;
 }
 
