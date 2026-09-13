@@ -205,6 +205,12 @@ function openSocket(config) {
       try {
         const parsed = JSON.parse(event.data);
         if (parsed.type !== "partial" && parsed.type !== "open") clearTimeout(commitTimer);
+        // The server closes right after a terminal event. Leaving `active` set
+        // means the close handler then reports "the connection dropped" on top of
+        // the real reason, and the real reason is the one worth reading.
+        if (parsed.type === "error" || parsed.type === "plan" || parsed.type === "empty") {
+          active = false;
+        }
         chrome.runtime.sendMessage({ type: "STREAM_EVENT", event: parsed });
       } catch {
         // Malformed frame; the server-side error path reports the real problem.

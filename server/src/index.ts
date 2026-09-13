@@ -7,7 +7,7 @@ import { TodoistClient } from "./integrations/todoist";
 import { executePlan, type TaskResult } from "./orchestrator/executor";
 import { Planner } from "./orchestrator/planner";
 import { Summariser } from "./orchestrator/summariser";
-import { attachStreamEndpoint } from "./stream";
+import { attachStreamEndpoint, warmLanguage } from "./stream";
 import { INTRON_SUPPORTED } from "./stt/intron";
 import { IntronStreamSttProvider } from "./stt/intronStream";
 import { IntronTtsProvider } from "./tts/intron";
@@ -200,3 +200,9 @@ attachStreamEndpoint(server, {
   todoist,
   authKey: config.auth.apiKey,
 });
+
+// Sahara loads a speech model per language on demand and drops the first session
+// or two while it does. Left alone, that cost lands on the user's first command,
+// which is the worst possible moment. Warming on startup moves it here, where
+// nobody is waiting. It sends no audio, so it costs nothing but a few sockets.
+warmLanguage(config.intron.apiKey, process.env.AALTO_WARM_LANGUAGE || "pcm");

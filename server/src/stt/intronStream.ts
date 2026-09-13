@@ -12,6 +12,14 @@ export interface IntronStreamOptions {
 }
 
 export interface IntronStreamHandle {
+  /**
+   * False once the session has ended, for any reason.
+   *
+   * Sahara will accept a session for a cold language and then drop it a couple of
+   * seconds later with no status, so "the open succeeded" is not the same as "the
+   * model is loaded". Callers check this after a short grace period.
+   */
+  isAlive(): boolean;
   sendChunk(pcm16LEChunk: Buffer): void;
   commit(): Promise<string>; // resolves with the final committed transcript
   close(): void;
@@ -88,6 +96,7 @@ export function openIntronStream(opts: IntronStreamOptions): Promise<IntronStrea
         case "SESSION_CREATED":
           opened = true;
           resolve({
+            isAlive: () => outcome === null && ws.readyState === WebSocket.OPEN,
             sendChunk: (chunk: Buffer) => {
               if (outcome || ws.readyState !== WebSocket.OPEN) return;
               ws.send(

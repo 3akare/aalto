@@ -40,6 +40,83 @@ interface Session {
   context: PlannerContext;
 }
 
+/**
+ * Open a Sahara session, coping with the per-language cold start.
+ *
+ * Sahara loads a speech model per language on demand and answers the first
+ * request for a cold one with "Required language not available for this session,
+ * please wait 30 seconds". Surfaced raw that reads as a connection failure, and
+ * the user has no idea their next attempt will work. Retrying briefly covers the
+ * common case; if it is still warming we say so in words the user can act on.
+ */
+async function openStreamWarmingIfNeeded(
+  deps: StreamDeps,
+  session: Session,
+  send: (payload: unknown) => void
+): Promise<IntronStreamHandle> {
+  const attempts = 4;
+  const warming = /required language not available|closed before committing/i;
+
+  for (let i = 0; i < attempts; i++) {
+    const last = i === attempts - 1;
+    try {
+      const handle = await openIntronStream({
+        apiKey: deps.intronApiKey,
+        languageCode: session.languageCode,
+        sampleRate: 16_000,
+        sessionTimeoutMs: 120_000,
+        onPartial: (text) => send({ type: "partial", text }),
+        onError: (message) => send({ type: "notice", message }),
+      });
+
+      // A cold language is ACCEPTED and then dropped a second or two later with
+      // no status, so a successful open proves nothing. Wait, then check.
+      await new Promise((r) => setTimeout(r, 1_500));
+      if (handle.isAlive()) return handle;
+      handle.close();
+      if (last) break;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!warming.test(message)) throw err;
+      if (last) break;
+    }
+
+    send({ type: "notice", message: "warming up the speech model" });
+    console.log(`[stream] ${session.languageCode} model cold, retrying`);
+    await new Promise((r) => setTimeout(r, 8_000));
+  }
+
+  throw new Error(
+    `Sahara is still loading the ${session.languageCode} model. Wait about half a minute and try again.`
+  );
+}
+
+/**
+ * Nudge Sahara into loading a language model, in the background.
+ *
+ * Opens sessions until one survives, sends no audio, then lets go. Failures are
+ * logged and never thrown: a server that will not start because a warm-up failed
+ * is worse than a slow first command.
+ */
+export async function warmLanguage(apiKey: string, languageCode: string): Promise<void> {
+  for (let i = 0; i < 6; i++) {
+    try {
+      const handle = await openIntronStream({ apiKey, languageCode, sampleRate: 16_000 });
+      await new Promise((r) => setTimeout(r, 1_500));
+      const alive = handle.isAlive();
+      handle.close();
+      if (alive) {
+        console.log(`[warm] ${languageCode} model ready`);
+        return;
+      }
+    } catch {
+      // Cold, or briefly unreachable. Either way the answer is to wait and retry.
+    }
+    await new Promise((r) => setTimeout(r, 10_000));
+  }
+  console.warn(`[warm] ${languageCode} model still cold; the first command may need a retry`);
+}
+
 export function attachStreamEndpoint(server: Server, deps: StreamDeps): WebSocketServer {
   const wss = new WebSocketServer({ server, path: "/api/stream" });
 
@@ -59,6 +136,9 @@ export function attachStreamEndpoint(server: Server, deps: StreamDeps): WebSocke
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(payload));
     };
     const fail = (message: string) => {
+      // Logged, because a failure that only travels to the browser leaves the
+      // server looking healthy while nothing works.
+      console.error("[stream]", message);
       send({ type: "error", message });
       ws.close();
     };
@@ -106,16 +186,7 @@ export function attachStreamEndpoint(server: Server, deps: StreamDeps): WebSocke
         session.context = msg.context ?? {};
 
         try {
-          session.handle = await openIntronStream({
-            apiKey: deps.intronApiKey,
-            languageCode: session.languageCode,
-            sampleRate: 16_000,
-            // Generous: the session should outlive a long spoken command plus the
-            // commit that follows it, and Sahara enforces its own 300s cap anyway.
-            sessionTimeoutMs: 120_000,
-            onPartial: (text) => send({ type: "partial", text }),
-            onError: (message) => send({ type: "notice", message }),
-          });
+          session.handle = await openStreamWarmingIfNeeded(deps, session, send);
           send({ type: "open" });
         } catch (err) {
           return fail(err instanceof Error ? err.message : "could not reach Sahara");
