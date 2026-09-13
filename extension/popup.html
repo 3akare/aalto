@@ -4,165 +4,325 @@
     <meta charset="utf-8" />
     <title>Aalto</title>
     <style>
+      /* Palette and type from DESIGN.md: cream canvas, warm coral, warm ink.
+         Copernicus/StyreneB are licensed, so the documented open substitutes are
+         used - Cormorant Garamond for display, Inter for body. */
+      /* Bundled, not fetched: MV3's content security policy blocks remote
+         resources on extension pages, and a demo should not need the network to
+         render its own wordmark. */
+      @font-face {
+        font-family: "Cormorant Garamond";
+        src: url("fonts/CormorantGaramond-SemiBold.ttf") format("truetype");
+        font-weight: 500 600;
+        font-display: swap;
+      }
+
       :root {
-        --bg: #ffffff;
-        --fg: #16181d;
-        --muted: #6b7280;
-        --line: #e5e7eb;
-        --accent: #1f6feb;
-        --ok: #137333;
-        --bad: #b3261e;
-        --ask: #9a6700;
+        --primary: #cc785c;
+        --primary-active: #a9583e;
+        --ink: #141413;
+        --body: #3d3d3a;
+        --muted: #6c6a64;
+        --muted-soft: #8e8b82;
+        --hairline: #e6dfd8;
+        --canvas: #faf9f5;
+        --surface-card: #efe9de;
+        --surface-dark: #181715;
+        --on-dark: #faf9f5;
+        --on-dark-soft: #a09d96;
+        --success: #5db872;
+        --error: #c64545;
+        --warning: #d4a017;
+
+        --serif: "Cormorant Garamond", "Tiempos Headline", Garamond, "Times New Roman", serif;
+        --sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #16181d;
-          --fg: #f3f4f6;
-          --muted: #9ca3af;
-          --line: #2d313a;
-          --accent: #4c8dff;
-          --ok: #4ade80;
-          --bad: #f87171;
-          --ask: #fbbf24;
-        }
-      }
+
       body {
-        width: 340px;
+        width: 372px;
         margin: 0;
-        padding: 14px;
-        background: var(--bg);
-        color: var(--fg);
-        font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+        padding: 16px;
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: var(--sans);
+        font-size: 14px;
+        line-height: 1.55;
       }
+
+      /* --- header ------------------------------------------------------- */
       header {
         display: flex;
         align-items: center;
         justify-content: space-between;
         margin-bottom: 12px;
       }
-      h1 {
-        font-size: 15px;
-        margin: 0;
+      .wordmark {
+        font-family: var(--serif);
+        font-size: 26px;
         font-weight: 600;
+        letter-spacing: -0.3px;
+        line-height: 1;
       }
-      #muteBtn {
-        background: none;
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        color: var(--fg);
-        cursor: pointer;
-        font-size: 14px;
-        padding: 4px 8px;
-      }
-      #muteBtn[aria-pressed="true"] {
+      .icon-btn {
+        width: 32px;
+        height: 32px;
+        display: grid;
+        place-items: center;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 9999px;
         color: var(--muted);
-        border-style: dashed;
+        cursor: pointer;
+        padding: 0;
       }
-      #micBtn {
+      .icon-btn:hover {
+        background: var(--surface-card);
+      }
+      .icon-btn[aria-expanded="true"] {
+        background: var(--surface-card);
+        color: var(--ink);
+      }
+
+      /* --- stage: waveform / spinner ------------------------------------ */
+      .stage {
+        position: relative;
+        background: var(--surface-dark);
+        border-radius: 16px;
+        padding: 20px;
+        height: 132px;
+        box-sizing: border-box;
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+      }
+      .stage-label {
+        position: absolute;
+        top: 14px;
+        left: 18px;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        color: var(--on-dark-soft);
+      }
+      #wave {
+        display: block;
         width: 100%;
-        padding: 14px;
-        font-size: 14px;
-        font-weight: 600;
-        color: #fff;
-        background: var(--accent);
-        border: 0;
-        border-radius: 8px;
-        cursor: pointer;
-        touch-action: none;
+        height: 64px;
       }
-      #micBtn.listening {
-        background: var(--bad);
+      #wave[hidden] {
+        display: none;
       }
-      #micBtn:disabled {
-        opacity: 0.55;
-        cursor: default;
+
+      .spinner {
+        width: 30px;
+        height: 30px;
+        border: 2px solid rgba(250, 249, 245, 0.18);
+        border-top-color: var(--primary);
+        border-radius: 9999px;
+        animation: spin 0.8s linear infinite;
       }
-      #status {
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .spinner {
+          animation-duration: 2.4s;
+        }
+      }
+
+      .idle-hint {
+        color: var(--on-dark-soft);
+        font-size: 13px;
+        text-align: center;
+      }
+      .idle-hint kbd {
+        font-family: var(--sans);
+        font-size: 11px;
+        border: 1px solid rgba(250, 249, 245, 0.22);
+        border-radius: 4px;
+        padding: 1px 5px;
+      }
+
+      #speakerBtn {
+        position: absolute;
+        right: 12px;
+        bottom: 10px;
+        color: var(--on-dark-soft);
+      }
+      #speakerBtn:hover {
+        background: rgba(250, 249, 245, 0.1);
+        color: var(--on-dark);
+      }
+      /* SVG children ignore the HTML `hidden` attribute, so the speaker glyph is
+         driven by a class on the button instead. */
+      #speakerBtn #muteSlash {
+        display: none;
+      }
+      #speakerBtn[aria-pressed="true"] #muteSlash {
+        display: inline;
+      }
+      #speakerBtn[aria-pressed="true"] #waves1,
+      #speakerBtn[aria-pressed="true"] #waves2 {
+        display: none;
+      }
+
+      /* --- reply -------------------------------------------------------- */
+      .reply {
+        margin-top: 12px;
+        background: var(--surface-card);
+        border-radius: 12px;
+        padding: 16px;
+      }
+      .reply[hidden] {
+        display: none;
+      }
+      .heard {
         color: var(--muted);
-        margin-top: 10px;
-        min-height: 18px;
-      }
-      #transcript {
-        margin-top: 6px;
+        font-size: 13px;
         font-style: italic;
+        margin-bottom: 8px;
       }
-      #summary {
-        margin-top: 8px;
-        font-weight: 600;
+      .heard[hidden] {
+        display: none;
       }
+      .answer {
+        font-family: var(--serif);
+        font-size: 19px;
+        font-weight: 500;
+        line-height: 1.35;
+        letter-spacing: -0.2px;
+        color: var(--ink);
+      }
+      .answer[hidden] {
+        display: none;
+      }
+
       ul {
         list-style: none;
         margin: 10px 0 0;
         padding: 0;
-        border-top: 1px solid var(--line);
       }
       li {
         display: flex;
-        gap: 8px;
-        padding: 6px 0;
-        border-bottom: 1px solid var(--line);
+        gap: 9px;
+        align-items: baseline;
+        padding: 5px 0;
+        color: var(--body);
+        font-size: 13px;
+      }
+      li + li {
+        border-top: 1px solid rgba(20, 20, 19, 0.06);
       }
       .mark {
-        width: 14px;
         flex: none;
+        width: 13px;
+        font-size: 12px;
       }
       .pending .mark {
-        color: var(--muted);
+        color: var(--muted-soft);
       }
       .ok .mark {
-        color: var(--ok);
+        color: var(--success);
       }
       .failed .mark {
-        color: var(--bad);
+        color: var(--error);
       }
-      .needs_input .mark {
-        color: var(--ask);
+      .needs_input .mark,
+      .answered .mark {
+        color: var(--warning);
       }
-      .tool {
+      .pending {
         color: var(--muted);
-        font-size: 11px;
       }
-      details {
+
+      /* --- settings ----------------------------------------------------- */
+      .settings {
         margin-top: 12px;
-        color: var(--muted);
+        border-top: 1px solid var(--hairline);
+        padding-top: 12px;
       }
-      summary {
-        cursor: pointer;
+      .settings[hidden] {
+        display: none;
       }
       label {
         display: block;
-        margin-top: 8px;
-        font-size: 11px;
+        margin-bottom: 10px;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--muted);
       }
       input,
       select {
         width: 100%;
-        padding: 5px;
-        margin-top: 2px;
+        margin-top: 4px;
+        padding: 9px 12px;
         box-sizing: border-box;
-        background: var(--bg);
-        color: var(--fg);
-        border: 1px solid var(--line);
-        border-radius: 5px;
+        font-family: var(--sans);
+        font-size: 14px;
+        color: var(--ink);
+        background: var(--canvas);
+        border: 1px solid var(--hairline);
+        border-radius: 8px;
+      }
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15);
+      }
+      .shortcut-note {
+        color: var(--muted-soft);
+        font-size: 12px;
+      }
+      .shortcut-note button {
+        background: none;
+        border: 0;
+        padding: 0;
+        font: inherit;
+        color: var(--primary);
+        cursor: pointer;
+        text-decoration: underline;
       }
     </style>
   </head>
   <body>
     <header>
-      <h1>🎙️ Aalto</h1>
-      <button type="button" id="muteBtn" aria-pressed="false" title="Mute spoken replies">
-        🔊
+      <span class="wordmark">Aalto</span>
+      <button type="button" class="icon-btn" id="settingsBtn" aria-expanded="false" title="Settings">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><title>Settings</title>
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
       </button>
     </header>
 
-    <button type="button" id="micBtn">Hold to talk</button>
-    <div id="status">Ready.</div>
-    <div id="transcript"></div>
-    <div id="summary"></div>
-    <ul id="tasks"></ul>
+    <div class="stage" id="stage" title="Click to stop or start listening">
+      <span class="stage-label" id="stageLabel">Listening</span>
+      <canvas id="wave" width="656" height="128"></canvas>
+      <div class="spinner" id="spinner" hidden></div>
+      <div class="idle-hint" id="idleHint" hidden>
+        Click, or press <kbd id="shortcutHint">Alt+A</kbd>, then speak
+      </div>
+      <button type="button" class="icon-btn" id="speakerBtn" aria-pressed="false" title="Mute spoken replies">
+        <svg id="speakerIcon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><title>Spoken replies</title>
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+          <path id="waves1" d="M15.5 8.5a5 5 0 0 1 0 7" />
+          <path id="waves2" d="M18.5 5.5a9 9 0 0 1 0 13" />
+          <line id="muteSlash" x1="3" y1="3" x2="21" y2="21" />
+        </svg>
+      </button>
+    </div>
 
-    <details>
-      <summary>Settings</summary>
+    <section class="reply" id="reply" hidden>
+      <div class="heard" id="heard" hidden></div>
+      <div class="answer" id="answer" hidden></div>
+      <ul id="tasks"></ul>
+    </section>
+
+    <section class="settings" id="settings" hidden>
       <label>
         Server URL
         <input type="text" id="serverUrl" value="http://localhost:8787" />
@@ -183,7 +343,10 @@
           <option value="sw">Swahili</option>
         </select>
       </label>
-    </details>
+      <p class="shortcut-note">
+        Change the shortcut at <button type="button" id="shortcutLink">chrome://extensions/shortcuts</button>
+      </p>
+    </section>
 
     <script src="popup.js"></script>
   </body>

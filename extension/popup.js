@@ -1,20 +1,30 @@
 /**
  * Popup — a view, not the engine.
  *
- * Recording and the whole command flow live in the background service worker and
- * the offscreen document, so closing this window (which Chrome does automatically
- * the moment Aalto opens a tab) does not interrupt anything.
+ * It opens already listening, draws the live waveform, and shows the reply. The
+ * recording and the command flow live in the background worker and the offscreen
+ * document, so closing this window mid-command interrupts nothing.
  */
 
-const micBtn = document.getElementById("micBtn");
-const muteBtn = document.getElementById("muteBtn");
-const statusEl = document.getElementById("status");
-const transcriptEl = document.getElementById("transcript");
-const summaryEl = document.getElementById("summary");
+const stage = document.getElementById("stage");
+const stageLabel = document.getElementById("stageLabel");
+const wave = document.getElementById("wave");
+const spinner = document.getElementById("spinner");
+const idleHint = document.getElementById("idleHint");
+const speakerBtn = document.getElementById("speakerBtn");
+
+const reply = document.getElementById("reply");
+const heardEl = document.getElementById("heard");
+const answerEl = document.getElementById("answer");
 const tasksEl = document.getElementById("tasks");
-const langSelect = document.getElementById("langSelect");
+
+const settingsBtn = document.getElementById("settingsBtn");
+const settings = document.getElementById("settings");
 const serverUrlInput = document.getElementById("serverUrl");
 const apiKeyInput = document.getElementById("apiKey");
+const langSelect = document.getElementById("langSelect");
+const shortcutHint = document.getElementById("shortcutHint");
+const shortcutLink = document.getElementById("shortcutLink");
 
 // --- settings ---------------------------------------------------------------
 
@@ -35,135 +45,150 @@ apiKeyInput.addEventListener("change", () => {
   chrome.storage.local.set({ apiKey: apiKeyInput.value });
 });
 
+settingsBtn.addEventListener("click", () => {
+  const open = settings.hidden;
+  settings.hidden = !open;
+  settingsBtn.setAttribute("aria-expanded", String(open));
+});
+
+// chrome:// URLs cannot be opened from an <a href>, so route it through tabs.
+shortcutLink.addEventListener("click", (e) => {
+  e.preventDefault();
+  chrome.tabs.create({ url: "chrome://extensions/shortcuts" });
+});
+
+chrome.commands?.getAll((commands) => {
+  const bound = commands?.find((c) => c.name === "_execute_action");
+  if (bound?.shortcut) shortcutHint.textContent = bound.shortcut;
+});
+
 function setMuteUi(muted) {
-  muteBtn.textContent = muted ? "🔇" : "🔊";
-  muteBtn.setAttribute("aria-pressed", String(muted));
-  muteBtn.title = muted ? "Spoken replies are off" : "Mute spoken replies";
+  speakerBtn.setAttribute("aria-pressed", String(muted));
+  speakerBtn.title = muted ? "Spoken replies are off" : "Mute spoken replies";
+  // The glyph itself is switched by CSS off aria-pressed; see popup.html.
 }
 
-muteBtn.addEventListener("click", async () => {
+speakerBtn.addEventListener("click", async (e) => {
+  e.stopPropagation(); // the stage behind it toggles listening
   const { muted } = await chrome.storage.local.get("muted");
   const next = muted !== true;
   await chrome.storage.local.set({ muted: next });
   setMuteUi(next);
-  // Silence anything already mid-sentence, so the button feels immediate.
   if (next) chrome.runtime.sendMessage({ type: "STOP_AUDIO" }).catch(() => {});
 });
 
-// --- hold to talk -----------------------------------------------------------
+// --- waveform ---------------------------------------------------------------
 
-// An explicit state machine, because start is async: a fast tap used to call
-// stop before getUserMedia had resolved, so the stop was a no-op and the mic
-// stayed hot with the button stuck on "Release to send".
-let phase = "idle"; // idle | arming | recording | stopping
+const BAR_COUNT = 20;
+const levels = new Array(BAR_COUNT).fill(0);
+const ctx = wave.getContext("2d");
+let waveRaf = null;
 
-async function press() {
-  if (phase !== "idle") return;
-  phase = "arming";
-  micBtn.textContent = "Starting…";
-
-  const res = await chrome.runtime.sendMessage({ type: "START_RECORDING" }).catch((err) => ({
-    ok: false,
-    error: err.message,
-  }));
-
-  if (res?.needsMic) {
-    // The background worker has opened the permission page in a tab; that tab
-    // taking focus closes this popup, so just reset and let the user come back.
-    phase = "idle";
-    micBtn.textContent = "Hold to talk";
-    statusEl.textContent = PHASE_TEXT.needs_mic;
-    return;
-  }
-
-  if (!res?.ok) {
-    phase = "idle";
-    micBtn.textContent = "Hold to talk";
-    statusEl.textContent = micErrorMessage(res?.error ?? "could not start recording");
-    return;
-  }
-
-  // Released during arming - honour it now rather than leaving the mic open.
-  if (phase !== "arming") {
-    await release(true);
-    return;
-  }
-  phase = "recording";
-  micBtn.textContent = "Release to send";
-  micBtn.classList.add("listening");
-  statusEl.textContent = "Listening…";
+function pushLevel(rms) {
+  // Speech RMS is small and very non-linear; a cube root opens up the quiet end
+  // so normal speaking shows movement rather than a flat line with rare spikes.
+  const shaped = Math.min(1, (rms / 0.28) ** (1 / 3));
+  levels.push(shaped);
+  levels.shift();
 }
 
-async function release(force = false) {
-  if (phase === "arming" && !force) {
-    // Mark intent; press() will finish the stop once the mic is actually live.
-    phase = "stopping";
-    return;
-  }
-  if (phase !== "recording" && !force) return;
-
-  phase = "stopping";
-  micBtn.classList.remove("listening");
-  micBtn.textContent = "Hold to talk";
-  statusEl.textContent = "Transcribing…";
-
-  const res = await chrome.runtime.sendMessage({ type: "STOP_RECORDING" }).catch((err) => ({
-    ok: false,
-    error: err.message,
-  }));
-  if (!res?.ok) statusEl.textContent = `Error: ${res?.error ?? "recording failed"}`;
-  phase = "idle";
+function roundedBar(x, y, w, h, r) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + w, y, x + w, y + h, radius);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
+  ctx.arcTo(x, y + h, x, y, radius);
+  ctx.arcTo(x, y, x + w, y, radius);
+  ctx.closePath();
 }
 
-function micErrorMessage(raw) {
-  if (/denied|NotAllowed/i.test(raw)) {
-    return "Microphone blocked. Allow it for this extension in Chrome's site settings.";
+function drawWave() {
+  const w = wave.width;
+  const h = wave.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const gap = 9;
+  const barW = (w - gap * (BAR_COUNT - 1)) / BAR_COUNT;
+  const mid = h / 2;
+
+  for (let i = 0; i < BAR_COUNT; i++) {
+    const level = levels[i];
+    const barH = Math.max(barW, level * h * 0.9);
+    const x = i * (barW + gap);
+    // Coral where there is speech, dimmed cream for the quiet tail — the shape
+    // in the sketch: a row of lozenges that swell as you talk.
+    ctx.fillStyle = level > 0.06 ? "#cc785c" : "rgba(160, 157, 150, 0.34)";
+    roundedBar(x, mid - barH / 2, barW, barH, barW / 2);
+    ctx.fill();
   }
-  if (/NotFound/i.test(raw)) return "No microphone found.";
-  return `Error: ${raw}`;
+  waveRaf = requestAnimationFrame(drawWave);
 }
 
-micBtn.addEventListener("pointerdown", (e) => {
-  e.preventDefault();
-  press();
-});
-micBtn.addEventListener("pointerup", () => release());
-micBtn.addEventListener("pointerleave", () => {
-  if (phase === "recording" || phase === "arming") release();
-});
-// Space and Enter, for anyone not using a mouse.
-micBtn.addEventListener("keydown", (e) => {
-  if ((e.key === " " || e.key === "Enter") && !e.repeat) {
-    e.preventDefault();
-    press();
+function startWave() {
+  if (!waveRaf) drawWave();
+}
+
+function stopWave() {
+  if (waveRaf) {
+    cancelAnimationFrame(waveRaf);
+    waveRaf = null;
+  }
+  levels.fill(0);
+}
+
+// --- stage control ----------------------------------------------------------
+
+let currentPhase = "idle";
+
+stage.addEventListener("click", () => {
+  if (currentPhase === "recording") {
+    chrome.runtime.sendMessage({ type: "CANCEL_RECORDING" }).catch(() => {});
+  } else if (currentPhase === "idle" || currentPhase === "done" || currentPhase === "error") {
+    chrome.runtime.sendMessage({ type: "START_RECORDING" }).catch(() => {});
   }
 });
-micBtn.addEventListener("keyup", (e) => {
-  if (e.key === " " || e.key === "Enter") release();
-});
 
-// --- rendering --------------------------------------------------------------
-
-const PHASE_TEXT = {
-  idle: "Ready.",
-  needs_mic: "Microphone not enabled — finish the setup in the tab that just opened.",
-  recording: "Listening…",
-  thinking: "Transcribing and planning…",
-  working: "Working…",
-  done: "",
-  error: "",
+const STAGE_LABEL = {
+  idle: "Ready",
+  recording: "Listening",
+  thinking: "Thinking",
+  working: "Working",
+  done: "Done",
+  error: "Something went wrong",
+  needs_mic: "Microphone needed",
 };
 
-const MARKS = { pending: "○", ok: "✓", failed: "✕", needs_input: "?" };
+const MARKS = { pending: "○", ok: "✓", failed: "✕", needs_input: "?", answered: "✓" };
 
 function render(s) {
   if (!s) return;
-  statusEl.textContent = s.phase === "error" ? `Error: ${s.error}` : (PHASE_TEXT[s.phase] ?? "");
-  transcriptEl.textContent = s.transcript ? `"${s.transcript}"` : "";
-  summaryEl.textContent = s.summary ?? "";
+  currentPhase = s.phase;
+
+  stageLabel.textContent = STAGE_LABEL[s.phase] ?? "";
+
+  const listening = s.phase === "recording";
+  const busy = s.phase === "thinking" || s.phase === "working";
+
+  wave.hidden = !listening;
+  spinner.hidden = !busy;
+  idleHint.hidden = listening || busy;
+
+  if (listening) startWave();
+  else stopWave();
+
+  heardEl.textContent = s.transcript ? `“${s.transcript}”` : "";
+  heardEl.hidden = !s.transcript;
+
+  const spoken = s.phase === "error" ? s.error : (s.summary ?? "");
+  answerEl.textContent = spoken ?? "";
+  answerEl.hidden = !spoken;
 
   tasksEl.replaceChildren();
-  for (const task of s.tasks ?? []) {
+  // An answered task's text is already the headline reply; repeating it in the
+  // list below would say the same thing twice.
+  const listed = (s.tasks ?? []).filter((t) => t.status !== "answered");
+  for (const task of listed) {
     const li = document.createElement("li");
     li.className = task.status;
 
@@ -172,30 +197,28 @@ function render(s) {
     mark.textContent = MARKS[task.status] ?? "○";
 
     const body = document.createElement("span");
-    if (task.detail) {
-      body.textContent = task.detail;
-    } else {
-      const tool = document.createElement("span");
-      tool.className = "tool";
-      tool.textContent = task.tool.replace(/_/g, " ");
-      body.append(tool);
-    }
+    body.textContent = task.detail || task.tool.replace(/_/g, " ");
 
     li.append(mark, body);
     tasksEl.append(li);
   }
 
-  // Don't let a stale "recording" state leave the button unusable after a reopen.
-  micBtn.disabled = s.phase === "thinking" || s.phase === "working";
+  reply.hidden = !s.transcript && !spoken && listed.length === 0;
 }
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === "STATE") render(message.state);
+  else if (message.type === "LEVEL") pushLevel(message.value);
   return false;
 });
 
-// A command may already be running from before this popup was opened.
+// Opening the popup IS the request to talk — the whole point is that a command
+// costs one keystroke. A command already in flight is rendered instead.
 chrome.runtime.sendMessage({ type: "GET_STATE" }, (res) => {
   if (chrome.runtime.lastError) return;
-  render(res?.state);
+  const s = res?.state;
+  render(s);
+  if (!s || s.phase === "idle" || s.phase === "done" || s.phase === "error") {
+    chrome.runtime.sendMessage({ type: "START_RECORDING" }).catch(() => {});
+  }
 });

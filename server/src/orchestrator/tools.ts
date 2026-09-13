@@ -95,6 +95,28 @@ export const AALTO_TOOLS = [
     },
   },
   {
+    name: "answer",
+    description:
+      "Answer a question directly, in place, without opening or changing anything. Use this for " +
+      "definitions, factual questions, translations, conversions, arithmetic, explanations - " +
+      "anything the user simply wants to KNOW. This is the preferred tool whenever the user is " +
+      "asking rather than instructing: it keeps them where they are instead of sending them to a " +
+      "search results page. Only fall back to search_web when the answer depends on something " +
+      "current or local that you cannot state reliably.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        text: {
+          type: "string",
+          description:
+            "The answer, in one or two short sentences of plain language. It will be read aloud, " +
+            "so write it to be spoken: no markdown, no lists, no citations, no preamble.",
+        },
+      },
+      required: ["text"],
+    },
+  },
+  {
     name: "clarify",
     description:
       "Use this when the transcript is too ambiguous or incomplete to safely map to another tool.",
@@ -144,6 +166,7 @@ export const SERVER_SIDE_TOOLS = new Set<AaltoToolName>([
   "todoist_add",
   "todoist_complete",
   "todoist_update",
+  "answer",
   "clarify",
 ]);
 

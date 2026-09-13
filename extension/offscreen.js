@@ -5,12 +5,29 @@
  * as soon as it loses focus - which happens the instant Aalto opens or switches
  * a tab. Playback lives here because a service worker has no DOM and therefore
  * no Audio element.
+ *
+ * It also does the listening-for-silence, so a command ends when the speaker
+ * stops talking rather than when they remember to release a button.
  */
+
+const SILENCE_RMS = 0.012; // below this counts as room tone rather than speech
+const SILENCE_HOLD_MS = 1100; // quiet for this long after speech -> commit
+const LEAD_IN_GRACE_MS = 4000; // wait at least this long for someone to start
+const MAX_UTTERANCE_MS = 25_000; // hard stop; Intron's session cap is far higher
+const LEVEL_INTERVAL_MS = 60; // waveform refresh sent to the popup
 
 let mediaRecorder = null;
 let chunks = [];
 let stream = null;
 let player = null;
+
+let audioCtx = null;
+let analyser = null;
+let levelTimer = null;
+let startedAt = 0;
+let lastVoiceAt = 0;
+let heardVoice = false;
+let autoStopTimer = null;
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.target !== "offscreen") return false;
@@ -64,9 +81,79 @@ async function startRecording() {
     if (e.data.size > 0) chunks.push(e.data);
   };
   mediaRecorder.start();
+
+  startedAt = Date.now();
+  lastVoiceAt = 0;
+  heardVoice = false;
+  startMetering();
+}
+
+/**
+ * Watch the input level: drive the popup's waveform, and decide when the speaker
+ * has finished. Ending on silence rather than on a button release is what lets
+ * the whole interaction be "press the shortcut, talk, done".
+ */
+function startMetering() {
+  if (!audioCtx) audioCtx = new AudioContext();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 1024;
+  analyser.smoothingTimeConstant = 0.6;
+  audioCtx.createMediaStreamSource(stream).connect(analyser);
+
+  const buf = new Float32Array(analyser.fftSize);
+
+  levelTimer = setInterval(() => {
+    analyser.getFloatTimeDomainData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    const rms = Math.sqrt(sum / buf.length);
+
+    // Nobody may be listening; that is not an error.
+    chrome.runtime.sendMessage({ type: "LEVEL", value: rms }).catch(() => {});
+
+    const now = Date.now();
+    if (rms >= SILENCE_RMS) {
+      heardVoice = true;
+      lastVoiceAt = now;
+    }
+
+    const elapsed = now - startedAt;
+    const quietFor = lastVoiceAt ? now - lastVoiceAt : 0;
+
+    if (heardVoice && quietFor >= SILENCE_HOLD_MS) {
+      requestAutoStop("silence");
+    } else if (!heardVoice && elapsed >= LEAD_IN_GRACE_MS) {
+      // Opened by accident, or the mic is dead - don't sit recording room tone.
+      requestAutoStop("nothing heard");
+    } else if (elapsed >= MAX_UTTERANCE_MS) {
+      requestAutoStop("max length");
+    }
+  }, LEVEL_INTERVAL_MS);
+}
+
+function stopMetering() {
+  clearInterval(levelTimer);
+  levelTimer = null;
+  if (analyser) {
+    analyser.disconnect();
+    analyser = null;
+  }
+}
+
+/** Hand the decision to the background worker so one path drives the whole flow. */
+function requestAutoStop(reason) {
+  if (autoStopTimer) return;
+  autoStopTimer = setTimeout(() => {
+    autoStopTimer = null;
+  }, 500);
+  stopMetering();
+  chrome.runtime.sendMessage({ type: "AUTO_STOP", reason, heardVoice })?.catch(() => {});
 }
 
 async function stopRecording() {
+  stopMetering();
   if (!mediaRecorder || mediaRecorder.state !== "recording") {
     throw new Error("not recording");
   }

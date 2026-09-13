@@ -13,7 +13,7 @@ import { isServerSide } from "./tools";
  * should get the two that worked plus an honest account of the third.
  */
 
-export type TaskStatus = "ok" | "failed" | "needs_input" | "pending";
+export type TaskStatus = "ok" | "failed" | "needs_input" | "answered" | "pending";
 
 export interface TaskResult {
   id: string;
@@ -112,6 +112,11 @@ async function runServerTask(task: PlannedTask, todoist: TodoistClient): Promise
         detail: `updated it to "${updated?.content}"${updated?.due ? `, due ${updated.due}` : ""}`,
       };
     }
+
+    // Answered in place. The point of this tool is that the user never leaves the
+    // page they are on, so it produces text and nothing else.
+    case "answer":
+      return { ...base, status: "answered", detail: task.input.text as string };
 
     case "clarify":
       return { ...base, status: "needs_input", detail: task.input.question as string };

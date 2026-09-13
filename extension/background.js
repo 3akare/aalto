@@ -48,6 +48,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         });
       return true;
 
+    // The offscreen worker heard the speaker stop. Ending on silence rather than
+    // on a button release is what makes the whole interaction "shortcut, talk, done".
+    case "AUTO_STOP":
+      if (state.phase === "recording") {
+        if (message.heardVoice) {
+          finishRecording().catch((err) => setState({ phase: "error", error: err.message }));
+        } else {
+          cancelRecording("I didn't hear anything.").catch(() => {});
+        }
+      }
+      return false;
+
+    case "CANCEL_RECORDING":
+      cancelRecording().catch(() => {});
+      sendResponse({ ok: true });
+      return false;
+
     case "GET_STATE":
       sendResponse({ state });
       return false;
@@ -60,6 +77,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     default:
       return false;
   }
+});
+
+// The popup auto-starts recording when it opens, so binding the shortcut to
+// _execute_action is all that is needed: press it anywhere and start talking.
+chrome.commands?.onCommand.addListener((command) => {
+  if (command === "_execute_action") chrome.action.openPopup().catch(() => {});
 });
 
 // --- offscreen document lifecycle ------------------------------------------
@@ -142,6 +165,16 @@ async function beginRecording() {
     throw err;
   }
   return { started: true };
+}
+
+/** Abandon a recording without sending it anywhere. */
+async function cancelRecording(message) {
+  try {
+    await sendToOffscreen({ type: "STOP_RECORDING" });
+  } catch {
+    // Nothing was recording; the state reset below is all that matters.
+  }
+  await setState({ phase: "idle", summary: message ?? "", tasks: [], transcript: "" });
 }
 
 async function finishRecording() {
@@ -254,18 +287,23 @@ async function markTask(id, status, detail) {
 
 async function executeAction(action) {
   switch (action.tool) {
+    // active:false throughout. The user called Aalto from somewhere else and
+    // should still be there when it finishes; a tab that steals focus mid-sentence
+    // is the exact thing this design is trying to avoid. switch_tab is the one
+    // deliberate exception, because switching is what it was asked to do.
     case "search_web": {
       const query = action.input.query;
       await chrome.tabs.create({
         url: `https://www.google.com/search?q=${encodeURIComponent(query)}`,
+        active: false,
       });
-      return `searched for "${query}"`;
+      return `searched for "${query}" in a background tab`;
     }
 
     case "open_url": {
       const url = normalizeUrl(action.input.url);
-      await chrome.tabs.create({ url });
-      return `opened ${hostOf(url)}`;
+      await chrome.tabs.create({ url, active: false });
+      return `opened ${hostOf(url)} in a background tab`;
     }
 
     case "switch_tab":

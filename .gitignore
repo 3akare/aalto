@@ -14,3 +14,6 @@ benchmark/audio-samples/**
 
 # The frozen sample manifest IS committed — it is the pre-registration record.
 !benchmark/manifest/
+
+# Generated UI previews for eyeballing the popup outside Chrome
+.preview/

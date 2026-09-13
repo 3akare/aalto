@@ -26,6 +26,18 @@ export class Summariser {
     const question = results.find((r) => r.status === "needs_input");
     if (question) return question.detail;
 
+    // An answer is the substance of the reply, not a status report. Summarising
+    // "answered: love is ..." into "I answered your question" would throw away the
+    // only thing the user actually asked for. Speak it as written, and append a
+    // short note about any side tasks that ran alongside it.
+    const answers = results.filter((r) => r.status === "answered");
+    if (answers.length > 0) {
+      const others = results.filter((r) => r.status !== "answered");
+      const answerText = answers.map((a) => a.detail).join(" ");
+      if (others.length === 0) return answerText;
+      return `${answerText} ${fallbackSummary(others)}`;
+    }
+
     if (results.length === 1) {
       const only = results[0];
       return capitalise(only.status === "ok" ? `${only.detail}.` : `Sorry, I ${only.detail}.`);
@@ -48,8 +60,8 @@ export class Summariser {
               lines,
           },
         ],
-        // biome-ignore lint/suspicious/noExplicitAny: generation_config is not in the SDK's typed request union
         generation_config: { temperature: 0, thinking_level: "low" },
+        // biome-ignore lint/suspicious/noExplicitAny: generation_config is not in the SDK's typed request union
       } as any);
       const text = (interaction.output_text ?? "").trim();
       if (text) return text;

@@ -27,7 +27,18 @@ tasks the speaker did not ask for.
 
 If a request is ambiguous or is missing information you would have to guess at, call "clarify"
 instead of guessing - especially for anything that fills in a form or changes an existing task,
-where a wrong guess is worse than a question.`;
+where a wrong guess is worse than a question.
+
+Above all: DO NOT TAKE THE USER AWAY FROM WHAT THEY ARE DOING. They are working in another tab and
+called you without leaving it. Two rules follow from that.
+
+1. If they are ASKING rather than INSTRUCTING - a definition, a fact, a translation, a conversion,
+   a calculation, an explanation - use "answer" and say it in one or two spoken sentences. Do not
+   send them to a search results page for something you can simply tell them. Reach for
+   "search_web" only when the answer genuinely depends on something current, local or specific
+   that you cannot state reliably yourself.
+2. If they are INSTRUCTING, do the work quietly and report back. Anything that happens away from
+   the browser - a Todoist task, for instance - needs no tab at all.`;
 
 export interface PlannedTask extends RoutedAction {
   /** Stable id used to correlate the executor's result and the SSE progress events. */
