@@ -4,8 +4,9 @@ A voice agent that lives in your browser, built for the Sahara/Intron Voice AI h
 
 Press `Alt+A`, speak, stop speaking. Aalto understands naturally code-switched speech - Yoruba-English,
 Hausa-English, Igbo-English, Pidgin - and answers questions, fills Google Forms, manages tabs, and
-updates Todoist. It targets **Legal & Public Services / civic accessibility**: people who are more
-fluent speaking in mixed local language than typing English-only forms.
+updates Todoist. It is an **accessibility** tool - for people more fluent speaking in a mixed
+local language than typing English-only forms - demonstrated on civic and
+public-service forms, where being shut out costs the most.
 
 The organising principle is **don't move the user**. Ask it what a term means and it tells you, in
 place, rather than throwing you into a search results page. Tabs it opens are opened behind what

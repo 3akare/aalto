@@ -76,8 +76,8 @@ tokenisation understates errors in agglutinative languages, where one written
 word carries several morphemes - a WER-only view would flatter systems on Bantu
 languages specifically.
 
-**Entity error rate - the downstream metric.** Aalto's task is filling civic
-forms. A transcript can post a respectable WER and be useless for that, because
+**Entity error rate - the downstream metric.** Aalto's task is filling in forms
+by voice. A transcript can post a respectable WER and be useless for that, because
 the tokens that decide it - a name, an age, a phone number - are a handful among
 hundreds of function words. Getting the age wrong moves WER by a fraction of a
 percent and makes the transcript unusable. Scored separately, it is visible.

@@ -1,14 +1,21 @@
 # Aalto - Solution Description
 
-**Category:** Legal & Public Services (civic service accessibility)
+**Category:** Other High-Impact Use Cases - accessibility
+**Demonstrated on:** civic and public-service forms
 
 ---
 
 ## Problem
 
+Digital services assume you can type, in English, in the register the form was written in. That
+assumption excludes a great many people, and the exclusion is invisible because it looks like a
+personal failing rather than a design choice.
+
 Nigeria's official language is English. Most Nigerians do not speak it the way official forms are
 written. What people actually speak is code-switched - Yoruba-English, Hausa-English, Igbo-English,
-Pidgin - switching language mid-sentence, often mid-clause, without noticing they are doing it.
+Pidgin - switching language mid-sentence, often mid-clause, without noticing they are doing it. Add
+limited literacy, or a small phone keyboard, or a queue, and a form that is theoretically available
+is practically closed.
 
 Civic processes have moved onto digital forms: business name registration, permit applications,
 community surveys, aid intake, school enrolment. Those forms are English-only and text-only. That is
@@ -22,14 +29,21 @@ returning fluent-looking output that has dropped or mangled exactly the switched
 AfriSwitch corpus exists because this is a measurable, unsolved problem across 12+ African
 languages; published baselines on it sit between 24% and 90% word error rate depending on language.
 
-Aalto is built for the person filling in a civic form, in the language they actually speak.
+Aalto is an accessibility tool: it lets someone reach a digital service by speaking, in the language
+they actually speak, rather than by typing in one they do not. Civic forms are where that matters
+most and where it is demonstrated here, because the cost of exclusion is highest when the service is
+a government one you cannot opt out of.
 
 ## Target users
 
-People completing civic and public-service processes online who speak naturally code-switched
-language: applicants and small business owners filing registrations, community health and extension
-workers doing intake on someone else's behalf, and anyone managing the follow-up admin a civic
-process generates ("remind me to bring my ID on Friday").
+Anyone shut out of a text-and-English interface: people more fluent speaking than typing, people
+whose English is conversational rather than bureaucratic, people with limited literacy, and people
+for whom a small keyboard is the obstacle.
+
+Demonstrated on the group where the stakes are highest - people completing civic and public-service
+processes online: applicants and small business owners filing registrations, community health and
+extension workers doing intake on someone else's behalf, and anyone managing the follow-up admin a
+civic process generates ("remind me to bring my ID on Friday").
 
 Secondary, and the reason the product is usable day-to-day rather than only at a registration desk:
 anyone who wants to ask a question or capture a task without leaving what they are doing.
