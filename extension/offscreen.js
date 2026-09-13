@@ -18,6 +18,8 @@ const LEAD_IN_GRACE_MS = 4000; // wait at least this long for someone to start
 const MAX_UTTERANCE_MS = 25_000; // hard stop
 const SAMPLE_RATE = 16_000; // what Sahara wants; asking for it avoids resampling
 const FRAME_BYTES = 8192; // 0.25s of PCM16 — inside Sahara's 1–32KB chunk window
+const LEVEL_INTERVAL_MS = 50; // waveform updates; see the throttle in onSamples
+const COMMIT_TIMEOUT_MS = 45_000; // give up if the server never answers a commit
 
 let stream = null;
 let audioCtx = null;
@@ -32,6 +34,8 @@ let startedAt = 0;
 let lastVoiceAt = 0;
 let heardVoice = false;
 let active = false;
+let lastLevelAt = 0;
+let commitTimer = null;
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.target !== "offscreen") return false;
@@ -128,14 +132,21 @@ function onSamples(float32) {
   }
   const rms = Math.sqrt(sum / float32.length);
 
-  // Nobody may be listening to the waveform; that is not an error.
-  chrome.runtime.sendMessage({ type: "LEVEL", value: rms }).catch(() => {});
+  const now = Date.now();
+  // A render quantum is 128 samples, so this runs ~125 times a second. Posting a
+  // message per call floods the service worker badly enough to stall the whole
+  // command, which looks exactly like a stream that never ends. The waveform
+  // needs about 20 updates a second, not 125.
+  if (now - lastLevelAt >= LEVEL_INTERVAL_MS) {
+    lastLevelAt = now;
+    // Nobody may be listening to the waveform; that is not an error.
+    chrome.runtime.sendMessage({ type: "LEVEL", value: rms }).catch(() => {});
+  }
 
   pending.push(int16);
   pendingBytes += int16.byteLength;
   if (pendingBytes >= FRAME_BYTES) flush();
 
-  const now = Date.now();
   if (rms >= SILENCE_RMS) {
     heardVoice = true;
     lastVoiceAt = now;
@@ -192,7 +203,9 @@ function openSocket(config) {
     socket.addEventListener("message", (event) => {
       if (typeof event.data !== "string") return;
       try {
-        chrome.runtime.sendMessage({ type: "STREAM_EVENT", event: JSON.parse(event.data) });
+        const parsed = JSON.parse(event.data);
+        if (parsed.type !== "partial" && parsed.type !== "open") clearTimeout(commitTimer);
+        chrome.runtime.sendMessage({ type: "STREAM_EVENT", event: parsed });
       } catch {
         // Malformed frame; the server-side error path reports the real problem.
       }
@@ -227,7 +240,28 @@ async function finish(reason) {
     socket.close();
     return;
   }
+
+  // Tell the worker the microphone is closed BEFORE waiting on the server.
+  // Otherwise the popup sits on "Listening" through the whole commit, and a
+  // slow transcription is indistinguishable from a stream that never ended.
+  chrome.runtime
+    .sendMessage({ type: "STREAM_EVENT", event: { type: "committing", reason } })
+    .catch(() => {});
+
   socket.send(JSON.stringify({ type: "commit" }));
+
+  // The server has its own timeouts, but if the socket simply goes quiet the
+  // user would wait forever. Fail loudly instead.
+  clearTimeout(commitTimer);
+  commitTimer = setTimeout(() => {
+    chrome.runtime
+      .sendMessage({
+        type: "STREAM_EVENT",
+        event: { type: "error", message: "the server stopped responding" },
+      })
+      .catch(() => {});
+    teardown();
+  }, COMMIT_TIMEOUT_MS);
 }
 
 function teardownCapture() {
@@ -244,6 +278,8 @@ function teardownCapture() {
 
 function teardown() {
   active = false;
+  clearTimeout(commitTimer);
+  commitTimer = null;
   teardownCapture();
   if (socket?.readyState === WebSocket.OPEN) socket.close();
   socket = null;

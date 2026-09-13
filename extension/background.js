@@ -237,6 +237,13 @@ async function onStreamEvent(event) {
       if (state.phase === "recording") await setState({ transcript: event.text ?? "" });
       return;
 
+    // The microphone is closed and the server is finishing up. Moving off
+    // "Listening" here is what stops a slow transcription from looking like a
+    // stream that never ended.
+    case "committing":
+      if (state.phase === "recording") await setState({ phase: "thinking" });
+      return;
+
     case "transcript":
       await setState({ phase: "thinking", transcript: event.text ?? "" });
       return;
