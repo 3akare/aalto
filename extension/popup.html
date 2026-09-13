@@ -213,10 +213,12 @@
         background: var(--line-strong);
       }
 
-      /* Beats the display:grid / display:block set on .record, #wave and the
-         reply card, which would otherwise keep them visible when hidden. */
-      [hidden][hidden] {
-        display: none;
+      /* Must outrank #wave { display: block } — an ID selector, which no amount
+         of attribute-selector stacking can beat. !important is the right tool
+         here and the lint rule is wrong about this one. */
+      /* biome-ignore lint/complexity/noImportantStyles: must beat an ID selector */
+      [hidden] {
+        display: none !important;
       }
 
       /* --- reply -------------------------------------------------------- */
