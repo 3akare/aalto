@@ -14,6 +14,16 @@ import { IntronTtsProvider } from "./tts/intron";
 
 assertServerConfig();
 
+// Node exits on an unhandled rejection by default. For a long-lived local server
+// driven by a browser extension that is the wrong trade: one bad frame should
+// cost a command, not the process, and certainly not a restart between demo takes.
+process.on("unhandledRejection", (reason) => {
+  console.error("[server] unhandled rejection:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("[server] uncaught exception:", err);
+});
+
 const app = express();
 
 // Wide-open CORS let anyone who could reach the port spend the API credits and

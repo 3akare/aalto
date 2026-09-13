@@ -43,6 +43,10 @@ interface Session {
 export function attachStreamEndpoint(server: Server, deps: StreamDeps): WebSocketServer {
   const wss = new WebSocketServer({ server, path: "/api/stream" });
 
+  // Without this a server-level socket error is an unhandled 'error' event,
+  // which throws and takes the process with it.
+  wss.on("error", (err) => console.error("[stream] server error:", err.message));
+
   wss.on("connection", (ws) => {
     const session: Session = {
       handle: null,
@@ -58,8 +62,28 @@ export function attachStreamEndpoint(server: Server, deps: StreamDeps): WebSocke
       send({ type: "error", message });
       ws.close();
     };
+    /** Closing an Intron session twice throws; closing it never leaks a metered one. */
+    const closeHandle = () => {
+      const handle = session.handle;
+      session.handle = null;
+      try {
+        handle?.close();
+      } catch {
+        // Already gone.
+      }
+    };
 
-    ws.on("message", async (data: Buffer, isBinary: boolean) => {
+    ws.on("message", (data: Buffer, isBinary: boolean) => {
+      // Never hand an async function straight to an emitter: a rejection inside
+      // one is an unhandled rejection, and Node exits on those by default. One
+      // bad frame would take the whole server down with it.
+      handleMessage(data, isBinary).catch((err) => {
+        console.error("[stream] handler failed:", err);
+        fail(err instanceof Error ? err.message : "stream failed");
+      });
+    });
+
+    async function handleMessage(data: Buffer, isBinary: boolean): Promise<void> {
       // Audio frames arrive as raw bytes and are the common case, so they are
       // handled before any parsing is attempted.
       if (isBinary) {
@@ -100,8 +124,7 @@ export function attachStreamEndpoint(server: Server, deps: StreamDeps): WebSocke
       }
 
       if (msg.type === "abort") {
-        session.handle?.close();
-        session.handle = null;
+        closeHandle();
         ws.close();
         return;
       }
@@ -112,8 +135,7 @@ export function attachStreamEndpoint(server: Server, deps: StreamDeps): WebSocke
 
         try {
           const transcript = (await session.handle.commit()).trim();
-          session.handle.close();
-          session.handle = null;
+          closeHandle();
 
           if (!transcript) {
             send({ type: "empty" });
@@ -128,20 +150,20 @@ export function attachStreamEndpoint(server: Server, deps: StreamDeps): WebSocke
           send({ type: "plan", transcript, tasks: plan.tasks, serverResults, browserTasks });
           ws.close();
         } catch (err) {
+          closeHandle();
           fail(err instanceof Error ? err.message : "transcription failed");
         }
       }
-    });
+    }
 
     // A client that vanishes mid-utterance must not leave a Sahara session open;
     // they are a metered resource with a hard concurrency and time limit.
     ws.on("close", () => {
-      session.handle?.close();
-      session.handle = null;
+      closeHandle();
     });
-    ws.on("error", () => {
-      session.handle?.close();
-      session.handle = null;
+    ws.on("error", (err) => {
+      console.error("[stream] socket error:", err.message);
+      closeHandle();
     });
   });
 
