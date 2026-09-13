@@ -10,6 +10,10 @@
 const OFFSCREEN_PATH = "offscreen.html";
 const DEFAULT_SERVER = "http://localhost:8787";
 const SHORTCUT_COMMAND = "start-listening";
+// Sahara requires a language code and its codes name code-switch pairs; "pcm" is
+// the Pidgin-English model. Sending nothing lands on English, which anglicises
+// Pidgin rather than transcribing it.
+const DEFAULT_LANGUAGE = "pcm";
 
 /** Mirrored into chrome.storage.local so a re-opened popup can pick up mid-flight. */
 const state = {
@@ -200,7 +204,7 @@ async function beginRecording() {
       type: "START_STREAM",
       config: {
         serverUrl: (settings.serverUrl || DEFAULT_SERVER).replace(/\/$/, ""),
-        languageCode: settings.langHint || undefined,
+        languageCode: settings.langHint || DEFAULT_LANGUAGE,
         apiKey: settings.apiKey || undefined,
         context: { openTabs: await openTabSummary(), formLabels: await activeFormLabels() },
       },

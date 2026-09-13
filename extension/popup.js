@@ -32,6 +32,7 @@ const apiKeyInput = document.getElementById("apiKey");
 const langSelect = document.getElementById("langSelect");
 const shortcutHint = document.getElementById("shortcutHint");
 const shortcutLink = document.getElementById("shortcutLink");
+const langChip = document.getElementById("langChip");
 
 // --- glyphs ----------------------------------------------------------------
 
@@ -48,18 +49,35 @@ function paintSpeaker(muted) {
 
 // --- settings --------------------------------------------------------------
 
+// Sahara requires a language and its codes name code-switch PAIRS — "pcm" is
+// the Pidgin-English model, not a Pidgin-only one. There is deliberately no
+// "auto": sending no hint got the English model, which quietly anglicised
+// Pidgin into nonsense ("wetin be CAC" -> "Waiting the CAC").
+const DEFAULT_LANGUAGE = "pcm";
+
 chrome.storage.local.get(["serverUrl", "langHint", "muted", "apiKey"], (data) => {
   if (data.serverUrl) serverUrlInput.value = data.serverUrl;
-  if (data.langHint) langSelect.value = data.langHint;
   if (data.apiKey) apiKeyInput.value = data.apiKey;
+  langSelect.value = data.langHint || DEFAULT_LANGUAGE;
+  if (!data.langHint) chrome.storage.local.set({ langHint: DEFAULT_LANGUAGE });
+  paintLanguage();
   paintSpeaker(data.muted === true);
 });
+
+/** Show the active pair on the stage; buried in settings, a wrong choice is
+ *  invisible until the transcript comes back in the wrong language. */
+function paintLanguage() {
+  const label = langSelect.options[langSelect.selectedIndex]?.text ?? "";
+  langChip.textContent = label.replace(" ⇄ English", "").replace(" only", "");
+  langChip.title = `Transcribing ${label}`;
+}
 
 serverUrlInput.addEventListener("change", () => {
   chrome.storage.local.set({ serverUrl: serverUrlInput.value });
 });
 langSelect.addEventListener("change", () => {
   chrome.storage.local.set({ langHint: langSelect.value });
+  paintLanguage();
 });
 apiKeyInput.addEventListener("change", () => {
   chrome.storage.local.set({ apiKey: apiKeyInput.value });

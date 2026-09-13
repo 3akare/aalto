@@ -135,6 +135,17 @@
       .stage-label.live {
         color: var(--coral);
       }
+      .lang-chip {
+        position: absolute;
+        top: 13px;
+        right: 13px;
+        font-size: 10.5px;
+        letter-spacing: 0.3px;
+        color: var(--ink-faint);
+        border: 1px solid var(--line-strong);
+        border-radius: 4px;
+        padding: 1px 6px;
+      }
 
       /* The resting state when opened by hand: press to start. */
       .record {
@@ -380,6 +391,7 @@
 
     <div class="stage">
       <span class="stage-label" id="stageLabel"></span>
+      <span class="lang-chip" id="langChip"></span>
 
       <button type="button" class="record" id="recordBtn" aria-label="Start listening"></button>
       <canvas id="wave" width="592" height="124" hidden></canvas>
@@ -416,13 +428,15 @@
       <label>
         Language
         <select id="langSelect">
-          <option value="">Detect automatically</option>
-          <option value="en">English</option>
-          <option value="yo">Yoruba</option>
-          <option value="ig">Igbo</option>
-          <option value="ha">Hausa</option>
-          <option value="pcm">Nigerian Pidgin</option>
-          <option value="sw">Swahili</option>
+          <option value="pcm">Pidgin ⇄ English</option>
+          <option value="yo">Yoruba ⇄ English</option>
+          <option value="ha">Hausa ⇄ English</option>
+          <option value="ig">Igbo ⇄ English</option>
+          <option value="sw">Swahili ⇄ English</option>
+          <option value="am">Amharic ⇄ English</option>
+          <option value="zu">Zulu ⇄ English</option>
+          <option value="rw">Kinyarwanda ⇄ English ⇄ French</option>
+          <option value="en">English only</option>
         </select>
       </label>
       <p class="link-row">
