@@ -262,6 +262,13 @@ async function main(): Promise<void> {
         parquetBytes.byteOffset,
         parquetBytes.byteOffset + parquetBytes.byteLength
       ) as ArrayBuffer,
+      // MUST be false. hyparquet defaults to decoding every BYTE_ARRAY as UTF-8,
+      // which turns audio into a string where each invalid byte sequence becomes
+      // U+FFFD - over half the samples in a WAV. The file still has a valid header
+      // and the right duration, so it decodes and plays; it is simply noise, and
+      // three separate ASR systems dutifully returned ~5% of the words before the
+      // cause was found. Columns typed as STRING are unaffected.
+      utf8: false,
     });
     if (rows.length === 0) continue;
     if (!columns) {
@@ -495,15 +502,23 @@ const audioByRowId = new Map<string, unknown>();
 /**
  * HuggingFace audio features arrive as { bytes, path } structs.
  *
- * hyparquet hands byte arrays back as latin1-encoded STRINGS, not Uint8Arrays -
- * decoding them as UTF-8 would silently corrupt every byte above 0x7F, so the
- * encoding here is load-bearing rather than incidental.
+ * Read with { utf8: false } they arrive as Uint8Array. Read with the default they
+ * arrive as a UTF-8-decoded string with every invalid sequence replaced, which is
+ * unrecoverable - so this throws rather than attempting to re-encode.
  */
 function extractAudioBytes(raw: unknown): Buffer | null {
   const asBuffer = (v: unknown): Buffer | null => {
     if (Buffer.isBuffer(v)) return v;
     if (v instanceof Uint8Array) return Buffer.from(v);
-    if (typeof v === "string") return Buffer.from(v, "latin1");
+    // Deliberately NOT accepting a string. Audio arriving as text means the
+    // reader decoded it as UTF-8 and the samples are already destroyed; silently
+    // re-encoding it produces a file that looks healthy and contains noise.
+    if (typeof v === "string") {
+      throw new Error(
+        "audio column came back as a string - parquet was read with utf8 decoding " +
+          "enabled and the samples are corrupt. Read with { utf8: false }."
+      );
+    }
     return null;
   };
   if (!raw) return null;
