@@ -65,6 +65,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ ok: true });
       return false;
 
+    case "POPUP_OPENED": {
+      const autoStart = summonedByShortcut;
+      summonedByShortcut = false;
+      sendResponse({ state, autoStart });
+      return false;
+    }
+
     case "GET_STATE":
       sendResponse({ state });
       return false;
@@ -81,8 +88,19 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
 // The popup auto-starts recording when it opens, so binding the shortcut to
 // _execute_action is all that is needed: press it anywhere and start talking.
+// Pressing the shortcut IS the request to talk, so the popup it opens should
+// already be listening. Opening the popup by hand should not: a window that
+// starts recording the moment you glance at it is unnerving. The popup asks
+// which happened, and this flag is consumed on read so it never leaks into the
+// next manual open.
+let summonedByShortcut = false;
+
 chrome.commands?.onCommand.addListener((command) => {
-  if (command === "_execute_action") chrome.action.openPopup().catch(() => {});
+  if (command !== "_execute_action") return;
+  summonedByShortcut = true;
+  chrome.action.openPopup().catch(() => {
+    summonedByShortcut = false;
+  });
 });
 
 // --- offscreen document lifecycle ------------------------------------------

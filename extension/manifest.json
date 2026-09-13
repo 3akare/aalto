@@ -1,15 +1,23 @@
 {
   "manifest_version": 3,
-  "name": "Aalto — Voice Browser Agent",
+  "name": "Aalto \u2014 Voice Browser Agent",
   "version": "0.3.0",
-  "description": "Speak to search, manage tabs, fill Google Forms, and update Todoist tasks — in code-switched language.",
+  "description": "Speak to search, manage tabs, fill Google Forms, and update Todoist tasks \u2014 in code-switched language.",
   "permissions": ["tabs", "activeTab", "scripting", "storage", "offscreen"],
   "host_permissions": ["<all_urls>"],
-  "background": { "service_worker": "background.js" },
-  "action": { "default_popup": "popup.html", "default_title": "Aalto — hold to talk" },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Aalto"
+  },
   "commands": {
     "_execute_action": {
-      "suggested_key": { "default": "Alt+A", "mac": "Alt+A" },
+      "suggested_key": {
+        "default": "Ctrl+Shift+A",
+        "mac": "Command+Shift+A"
+      },
       "description": "Open Aalto and start listening"
     }
   },

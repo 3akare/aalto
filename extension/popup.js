@@ -1,24 +1,31 @@
+/* global riIcon */
 /**
  * Popup — a view, not the engine.
  *
- * It opens already listening, draws the live waveform, and shows the reply. The
- * recording and the command flow live in the background worker and the offscreen
- * document, so closing this window mid-command interrupts nothing.
+ * Two ways in, deliberately different:
+ *   • the keyboard shortcut starts listening immediately, because pressing it IS
+ *     the request to talk;
+ *   • opening it by hand shows a record button and waits, because a popup that
+ *     started recording the moment you glanced at it would be unnerving.
+ *
+ * Either way it ends the same: when you stop talking. Recording and the command
+ * flow live in the background worker and the offscreen document, so closing this
+ * window mid-command interrupts nothing.
  */
 
-const stage = document.getElementById("stage");
 const stageLabel = document.getElementById("stageLabel");
+const recordBtn = document.getElementById("recordBtn");
+const recordHint = document.getElementById("recordHint");
 const wave = document.getElementById("wave");
-const spinner = document.getElementById("spinner");
-const idleHint = document.getElementById("idleHint");
+const loader = document.getElementById("loader");
 const speakerBtn = document.getElementById("speakerBtn");
+const settingsBtn = document.getElementById("settingsBtn");
 
 const reply = document.getElementById("reply");
 const heardEl = document.getElementById("heard");
 const answerEl = document.getElementById("answer");
 const tasksEl = document.getElementById("tasks");
 
-const settingsBtn = document.getElementById("settingsBtn");
 const settings = document.getElementById("settings");
 const serverUrlInput = document.getElementById("serverUrl");
 const apiKeyInput = document.getElementById("apiKey");
@@ -26,13 +33,26 @@ const langSelect = document.getElementById("langSelect");
 const shortcutHint = document.getElementById("shortcutHint");
 const shortcutLink = document.getElementById("shortcutLink");
 
-// --- settings ---------------------------------------------------------------
+// --- glyphs ----------------------------------------------------------------
+
+settingsBtn.append(riIcon("settings", 17));
+loader.append(riIcon("loader", 26));
+recordBtn.append(riIcon("mic", 23));
+shortcutLink.append(document.createTextNode("Change shortcut"), riIcon("arrowUpRight", 12));
+
+function paintSpeaker(muted) {
+  speakerBtn.replaceChildren(riIcon(muted ? "volumeMute" : "volumeUp", 17));
+  speakerBtn.setAttribute("aria-pressed", String(muted));
+  speakerBtn.setAttribute("aria-label", muted ? "Unmute spoken replies" : "Mute spoken replies");
+}
+
+// --- settings --------------------------------------------------------------
 
 chrome.storage.local.get(["serverUrl", "langHint", "muted", "apiKey"], (data) => {
   if (data.serverUrl) serverUrlInput.value = data.serverUrl;
   if (data.langHint) langSelect.value = data.langHint;
   if (data.apiKey) apiKeyInput.value = data.apiKey;
-  setMuteUi(data.muted === true);
+  paintSpeaker(data.muted === true);
 });
 
 serverUrlInput.addEventListener("change", () => {
@@ -52,47 +72,41 @@ settingsBtn.addEventListener("click", () => {
 });
 
 // chrome:// URLs cannot be opened from an <a href>, so route it through tabs.
-shortcutLink.addEventListener("click", (e) => {
-  e.preventDefault();
+shortcutLink.addEventListener("click", () => {
   chrome.tabs.create({ url: "chrome://extensions/shortcuts" });
 });
 
 chrome.commands?.getAll((commands) => {
   const bound = commands?.find((c) => c.name === "_execute_action");
   if (bound?.shortcut) shortcutHint.textContent = bound.shortcut;
+  // Unbound usually means it collided with one of Chrome's own shortcuts.
+  else recordHint.hidden = true;
 });
 
-function setMuteUi(muted) {
-  speakerBtn.setAttribute("aria-pressed", String(muted));
-  speakerBtn.title = muted ? "Spoken replies are off" : "Mute spoken replies";
-  // The glyph itself is switched by CSS off aria-pressed; see popup.html.
-}
-
-speakerBtn.addEventListener("click", async (e) => {
-  e.stopPropagation(); // the stage behind it toggles listening
+speakerBtn.addEventListener("click", async () => {
   const { muted } = await chrome.storage.local.get("muted");
   const next = muted !== true;
   await chrome.storage.local.set({ muted: next });
-  setMuteUi(next);
+  paintSpeaker(next);
   if (next) chrome.runtime.sendMessage({ type: "STOP_AUDIO" }).catch(() => {});
 });
 
-// --- waveform ---------------------------------------------------------------
+// --- waveform --------------------------------------------------------------
 
-const BAR_COUNT = 20;
+const BAR_COUNT = 19;
 const levels = new Array(BAR_COUNT).fill(0);
 const ctx = wave.getContext("2d");
 let waveRaf = null;
+let eased = new Array(BAR_COUNT).fill(0);
 
 function pushLevel(rms) {
   // Speech RMS is small and very non-linear; a cube root opens up the quiet end
-  // so normal speaking shows movement rather than a flat line with rare spikes.
-  const shaped = Math.min(1, (rms / 0.28) ** (1 / 3));
-  levels.push(shaped);
+  // so ordinary speaking shows movement rather than a flat line with rare spikes.
+  levels.push(Math.min(1, (rms / 0.3) ** (1 / 3)));
   levels.shift();
 }
 
-function roundedBar(x, y, w, h, r) {
+function bar(x, y, w, h, r) {
   const radius = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
   ctx.moveTo(x + radius, y);
@@ -108,18 +122,20 @@ function drawWave() {
   const h = wave.height;
   ctx.clearRect(0, 0, w, h);
 
-  const gap = 9;
+  const gap = 10;
   const barW = (w - gap * (BAR_COUNT - 1)) / BAR_COUNT;
   const mid = h / 2;
 
   for (let i = 0; i < BAR_COUNT; i++) {
-    const level = levels[i];
-    const barH = Math.max(barW, level * h * 0.9);
+    // Ease toward the target so the bars glide rather than strobe at 16fps.
+    eased[i] += (levels[i] - eased[i]) * 0.35;
+    const level = eased[i];
+    const barH = Math.max(barW, level * h * 0.88);
     const x = i * (barW + gap);
-    // Coral where there is speech, dimmed cream for the quiet tail — the shape
-    // in the sketch: a row of lozenges that swell as you talk.
-    ctx.fillStyle = level > 0.06 ? "#cc785c" : "rgba(160, 157, 150, 0.34)";
-    roundedBar(x, mid - barH / 2, barW, barH, barW / 2);
+
+    ctx.fillStyle =
+      level > 0.05 ? `rgba(204, 120, 92, ${0.45 + level * 0.55})` : "rgba(160, 157, 150, 0.26)";
+    bar(x, mid - barH / 2, barW, barH, barW / 2);
     ctx.fill();
   }
   waveRaf = requestAnimationFrame(drawWave);
@@ -130,49 +146,53 @@ function startWave() {
 }
 
 function stopWave() {
-  if (waveRaf) {
-    cancelAnimationFrame(waveRaf);
-    waveRaf = null;
-  }
+  if (waveRaf) cancelAnimationFrame(waveRaf);
+  waveRaf = null;
   levels.fill(0);
+  eased = new Array(BAR_COUNT).fill(0);
 }
 
-// --- stage control ----------------------------------------------------------
+// --- stage -----------------------------------------------------------------
 
 let currentPhase = "idle";
 
-stage.addEventListener("click", () => {
-  if (currentPhase === "recording") {
-    chrome.runtime.sendMessage({ type: "CANCEL_RECORDING" }).catch(() => {});
-  } else if (currentPhase === "idle" || currentPhase === "done" || currentPhase === "error") {
-    chrome.runtime.sendMessage({ type: "START_RECORDING" }).catch(() => {});
-  }
+recordBtn.addEventListener("click", () => {
+  const type = currentPhase === "recording" ? "CANCEL_RECORDING" : "START_RECORDING";
+  chrome.runtime.sendMessage({ type }).catch(() => {});
 });
 
 const STAGE_LABEL = {
-  idle: "Ready",
+  idle: "",
   recording: "Listening",
   thinking: "Thinking",
   working: "Working",
-  done: "Done",
-  error: "Something went wrong",
+  done: "",
+  error: "",
   needs_mic: "Microphone needed",
 };
 
-const MARKS = { pending: "○", ok: "✓", failed: "✕", needs_input: "?", answered: "✓" };
+const TASK_ICON = {
+  ok: "check",
+  failed: "close",
+  needs_input: "question",
+  answered: "check",
+  pending: "loader",
+};
 
 function render(s) {
   if (!s) return;
   currentPhase = s.phase;
 
-  stageLabel.textContent = STAGE_LABEL[s.phase] ?? "";
-
   const listening = s.phase === "recording";
   const busy = s.phase === "thinking" || s.phase === "working";
 
+  stageLabel.textContent = STAGE_LABEL[s.phase] ?? "";
+  stageLabel.classList.toggle("live", listening);
+
+  recordBtn.hidden = listening || busy;
   wave.hidden = !listening;
-  spinner.hidden = !busy;
-  idleHint.hidden = listening || busy;
+  loader.hidden = !busy;
+  recordHint.hidden = listening || busy || !shortcutHint.textContent;
 
   if (listening) startWave();
   else stopWave();
@@ -180,30 +200,29 @@ function render(s) {
   heardEl.textContent = s.transcript ? `“${s.transcript}”` : "";
   heardEl.hidden = !s.transcript;
 
-  const spoken = s.phase === "error" ? s.error : (s.summary ?? "");
-  answerEl.textContent = spoken ?? "";
-  answerEl.hidden = !spoken;
+  const isError = s.phase === "error";
+  const headline = isError ? s.error : (s.summary ?? "");
+  answerEl.textContent = headline ?? "";
+  answerEl.hidden = !headline;
+  answerEl.classList.toggle("is-error", isError);
 
-  tasksEl.replaceChildren();
-  // An answered task's text is already the headline reply; repeating it in the
-  // list below would say the same thing twice.
+  // An answered task's text is already the headline; repeating it below would
+  // say the same thing twice.
   const listed = (s.tasks ?? []).filter((t) => t.status !== "answered");
+  tasksEl.replaceChildren();
   for (const task of listed) {
     const li = document.createElement("li");
     li.className = task.status;
+    li.append(riIcon(TASK_ICON[task.status] ?? "loader", 14));
 
-    const mark = document.createElement("span");
-    mark.className = "mark";
-    mark.textContent = MARKS[task.status] ?? "○";
-
-    const body = document.createElement("span");
-    body.textContent = task.detail || task.tool.replace(/_/g, " ");
-
-    li.append(mark, body);
+    const text = document.createElement("span");
+    text.textContent = task.detail || task.tool.replace(/_/g, " ");
+    li.append(text);
     tasksEl.append(li);
   }
 
-  reply.hidden = !s.transcript && !spoken && listed.length === 0;
+  reply.classList.toggle("has-answer", Boolean(headline) && listed.length > 0);
+  reply.hidden = !s.transcript && !headline && listed.length === 0;
 }
 
 chrome.runtime.onMessage.addListener((message) => {
@@ -212,13 +231,10 @@ chrome.runtime.onMessage.addListener((message) => {
   return false;
 });
 
-// Opening the popup IS the request to talk — the whole point is that a command
-// costs one keystroke. A command already in flight is rendered instead.
-chrome.runtime.sendMessage({ type: "GET_STATE" }, (res) => {
+// The background worker reports whether this popup was summoned by the shortcut
+// (start talking straight away) or opened by hand (wait for the button).
+chrome.runtime.sendMessage({ type: "POPUP_OPENED" }, (res) => {
   if (chrome.runtime.lastError) return;
-  const s = res?.state;
-  render(s);
-  if (!s || s.phase === "idle" || s.phase === "done" || s.phase === "error") {
-    chrome.runtime.sendMessage({ type: "START_RECORDING" }).catch(() => {});
-  }
+  render(res?.state);
+  if (res?.autoStart) chrome.runtime.sendMessage({ type: "START_RECORDING" }).catch(() => {});
 });

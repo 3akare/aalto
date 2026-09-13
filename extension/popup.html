@@ -4,49 +4,60 @@
     <meta charset="utf-8" />
     <title>Aalto</title>
     <style>
-      /* Palette and type from DESIGN.md: cream canvas, warm coral, warm ink.
-         Copernicus/StyreneB are licensed, so the documented open substitutes are
-         used - Cormorant Garamond for display, Inter for body. */
-      /* Bundled, not fetched: MV3's content security policy blocks remote
-         resources on extension pages, and a demo should not need the network to
-         render its own wordmark. */
+      /* Dark-mode Claude: warm near-black surfaces, cream ink, coral used
+         sparingly. Palette derived from DESIGN.md's dark tokens.
+
+         Nothing here is bold or semibold. Hierarchy comes from size, colour and
+         space — which is also what lets the serif read as editorial rather than
+         as a heading in a dashboard. */
       @font-face {
         font-family: "Cormorant Garamond";
-        src: url("fonts/CormorantGaramond-SemiBold.ttf") format("truetype");
-        font-weight: 500 600;
-        font-display: swap;
+        src: url("fonts/CormorantGaramond-Regular.ttf") format("truetype");
+        font-weight: 400;
+        font-display: block;
       }
 
       :root {
-        --primary: #cc785c;
-        --primary-active: #a9583e;
-        --ink: #141413;
-        --body: #3d3d3a;
-        --muted: #6c6a64;
-        --muted-soft: #8e8b82;
-        --hairline: #e6dfd8;
-        --canvas: #faf9f5;
-        --surface-card: #efe9de;
-        --surface-dark: #181715;
-        --on-dark: #faf9f5;
-        --on-dark-soft: #a09d96;
-        --success: #5db872;
-        --error: #c64545;
-        --warning: #d4a017;
+        --coral: #cc785c;
+        --coral-dim: rgba(204, 120, 92, 0.16);
 
-        --serif: "Cormorant Garamond", "Tiempos Headline", Garamond, "Times New Roman", serif;
+        --bg: #1a1917;
+        --stage: #242320;
+        --card: #1f1e1b;
+        --raised: #2b2926;
+
+        --ink: #faf9f5;
+        --ink-soft: #a09d96;
+        --ink-faint: #6c6a64;
+
+        --line: rgba(250, 249, 245, 0.07);
+        --line-strong: rgba(250, 249, 245, 0.12);
+
+        --ok: #5db872;
+        --bad: #d98b7f;
+        --ask: #e8a55a;
+
+        --serif: "Cormorant Garamond", Garamond, "Times New Roman", serif;
         --sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+        --ease: cubic-bezier(0.32, 0.72, 0, 1);
+      }
+
+      * {
+        box-sizing: border-box;
       }
 
       body {
-        width: 372px;
+        width: 380px;
         margin: 0;
-        padding: 16px;
-        background: var(--canvas);
+        padding: 18px 18px 20px;
+        background: var(--bg);
         color: var(--ink);
         font-family: var(--sans);
-        font-size: 14px;
-        line-height: 1.55;
+        font-size: 13.5px;
+        font-weight: 400;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
       }
 
       /* --- header ------------------------------------------------------- */
@@ -54,236 +65,294 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        margin-bottom: 12px;
+        margin-bottom: 14px;
+        padding-left: 2px;
       }
       .wordmark {
         font-family: var(--serif);
-        font-size: 26px;
-        font-weight: 600;
-        letter-spacing: -0.3px;
+        font-size: 27px;
+        font-weight: 400;
+        letter-spacing: -0.2px;
         line-height: 1;
       }
-      .icon-btn {
-        width: 32px;
-        height: 32px;
+      .ghost-btn {
+        width: 30px;
+        height: 30px;
         display: grid;
         place-items: center;
-        background: transparent;
-        border: 1px solid transparent;
-        border-radius: 9999px;
-        color: var(--muted);
-        cursor: pointer;
         padding: 0;
+        background: transparent;
+        border: 0;
+        border-radius: 9999px;
+        color: var(--ink-faint);
+        cursor: pointer;
+        transition:
+          color 0.18s var(--ease),
+          background 0.18s var(--ease);
       }
-      .icon-btn:hover {
-        background: var(--surface-card);
-      }
-      .icon-btn[aria-expanded="true"] {
-        background: var(--surface-card);
+      .ghost-btn:hover {
         color: var(--ink);
+        background: var(--line);
+      }
+      .ghost-btn:focus-visible {
+        outline: 2px solid var(--coral);
+        outline-offset: 2px;
+      }
+      .ghost-btn[aria-expanded="true"] {
+        color: var(--ink);
+        background: var(--line);
       }
 
-      /* --- stage: waveform / spinner ------------------------------------ */
+      /* --- stage -------------------------------------------------------- */
       .stage {
         position: relative;
-        background: var(--surface-dark);
-        border-radius: 16px;
-        padding: 20px;
-        height: 132px;
-        box-sizing: border-box;
+        height: 148px;
+        border-radius: 18px;
+        background: var(--stage);
+        border: 1px solid var(--line);
         display: grid;
         place-items: center;
-        cursor: pointer;
+        overflow: hidden;
       }
       .stage-label {
         position: absolute;
-        top: 14px;
-        left: 18px;
-        font-size: 12px;
-        font-weight: 500;
-        letter-spacing: 1.5px;
+        top: 15px;
+        left: 17px;
+        font-size: 10.5px;
+        letter-spacing: 1.4px;
         text-transform: uppercase;
-        color: var(--on-dark-soft);
+        color: var(--ink-faint);
+        transition: color 0.2s var(--ease);
       }
-      #wave {
-        display: block;
-        width: 100%;
-        height: 64px;
-      }
-      #wave[hidden] {
-        display: none;
+      .stage-label.live {
+        color: var(--coral);
       }
 
-      .spinner {
-        width: 30px;
-        height: 30px;
-        border: 2px solid rgba(250, 249, 245, 0.18);
-        border-top-color: var(--primary);
+      /* The resting state when opened by hand: press to start. */
+      .record {
+        width: 62px;
+        height: 62px;
+        padding: 0;
         border-radius: 9999px;
-        animation: spin 0.8s linear infinite;
+        border: 1px solid var(--line-strong);
+        background: var(--raised);
+        color: var(--ink);
+        display: grid;
+        place-items: center;
+        cursor: pointer;
+        transition:
+          transform 0.22s var(--ease),
+          background 0.22s var(--ease),
+          border-color 0.22s var(--ease),
+          box-shadow 0.22s var(--ease);
+      }
+      .record:hover {
+        background: var(--coral);
+        border-color: var(--coral);
+        transform: scale(1.05);
+        box-shadow: 0 0 0 8px var(--coral-dim);
+      }
+      .record:focus-visible {
+        outline: 2px solid var(--coral);
+        outline-offset: 4px;
+      }
+      .record:active {
+        transform: scale(0.97);
+      }
+
+      .record-hint {
+        position: absolute;
+        bottom: 15px;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 11.5px;
+        color: var(--ink-faint);
+      }
+      kbd {
+        font-family: var(--sans);
+        font-size: 10.5px;
+        color: var(--ink-soft);
+        border: 1px solid var(--line-strong);
+        border-radius: 4px;
+        padding: 1.5px 5px;
+      }
+
+      #wave {
+        display: block;
+        width: 296px;
+        height: 62px;
+      }
+
+      .loading {
+        color: var(--coral);
+        animation: spin 0.9s linear infinite;
+        transform-origin: center;
+        line-height: 0;
       }
       @keyframes spin {
         to {
           transform: rotate(360deg);
         }
       }
-      @media (prefers-reduced-motion: reduce) {
-        .spinner {
-          animation-duration: 2.4s;
-        }
-      }
-
-      .idle-hint {
-        color: var(--on-dark-soft);
-        font-size: 13px;
-        text-align: center;
-      }
-      .idle-hint kbd {
-        font-family: var(--sans);
-        font-size: 11px;
-        border: 1px solid rgba(250, 249, 245, 0.22);
-        border-radius: 4px;
-        padding: 1px 5px;
-      }
 
       #speakerBtn {
         position: absolute;
-        right: 12px;
+        right: 11px;
         bottom: 10px;
-        color: var(--on-dark-soft);
       }
       #speakerBtn:hover {
-        background: rgba(250, 249, 245, 0.1);
-        color: var(--on-dark);
+        background: var(--line-strong);
       }
-      /* SVG children ignore the HTML `hidden` attribute, so the speaker glyph is
-         driven by a class on the button instead. */
-      #speakerBtn #muteSlash {
-        display: none;
-      }
-      #speakerBtn[aria-pressed="true"] #muteSlash {
-        display: inline;
-      }
-      #speakerBtn[aria-pressed="true"] #waves1,
-      #speakerBtn[aria-pressed="true"] #waves2 {
-        display: none;
+
+      /* Beats the display:grid / display:block set on .record, #wave and the
+         reply card, which would otherwise keep them visible when hidden. */
+      /* biome-ignore lint/complexity/noImportantStyles: must outrank the layout rules above */
+      [hidden] {
+        display: none !important;
       }
 
       /* --- reply -------------------------------------------------------- */
       .reply {
-        margin-top: 12px;
-        background: var(--surface-card);
-        border-radius: 12px;
-        padding: 16px;
+        margin-top: 14px;
+        padding: 16px 17px;
+        border-radius: 14px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        animation: rise 0.26s var(--ease);
       }
-      .reply[hidden] {
-        display: none;
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(5px);
+        }
       }
       .heard {
-        color: var(--muted);
-        font-size: 13px;
-        font-style: italic;
-        margin-bottom: 8px;
-      }
-      .heard[hidden] {
-        display: none;
+        font-size: 12px;
+        color: var(--ink-faint);
+        margin-bottom: 9px;
       }
       .answer {
         font-family: var(--serif);
-        font-size: 19px;
-        font-weight: 500;
-        line-height: 1.35;
-        letter-spacing: -0.2px;
+        font-size: 21px;
+        font-weight: 400;
+        line-height: 1.34;
+        letter-spacing: -0.15px;
         color: var(--ink);
       }
-      .answer[hidden] {
-        display: none;
+      .answer.is-error {
+        font-family: var(--sans);
+        font-size: 13.5px;
+        color: var(--bad);
       }
 
       ul {
         list-style: none;
-        margin: 10px 0 0;
+        margin: 0;
         padding: 0;
+      }
+      .has-answer ul {
+        margin-top: 13px;
+        padding-top: 12px;
+        border-top: 1px solid var(--line);
       }
       li {
         display: flex;
         gap: 9px;
-        align-items: baseline;
+        align-items: flex-start;
         padding: 5px 0;
-        color: var(--body);
-        font-size: 13px;
+        font-size: 12.5px;
+        color: var(--ink-soft);
       }
-      li + li {
-        border-top: 1px solid rgba(20, 20, 19, 0.06);
-      }
-      .mark {
+      li svg {
         flex: none;
-        width: 13px;
-        font-size: 12px;
+        margin-top: 1px;
       }
-      .pending .mark {
-        color: var(--muted-soft);
+      li.ok svg {
+        color: var(--ok);
       }
-      .ok .mark {
-        color: var(--success);
+      li.failed svg {
+        color: var(--bad);
       }
-      .failed .mark {
-        color: var(--error);
+      li.needs_input svg {
+        color: var(--ask);
       }
-      .needs_input .mark,
-      .answered .mark {
-        color: var(--warning);
+      li.pending {
+        color: var(--ink-faint);
       }
-      .pending {
-        color: var(--muted);
+      li.pending svg {
+        color: var(--ink-faint);
+        animation: spin 1.1s linear infinite;
+        transform-origin: center;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .loading,
+        li.pending svg {
+          animation-duration: 2.6s;
+        }
+        .record,
+        .ghost-btn,
+        .reply {
+          transition: none;
+          animation: none;
+        }
       }
 
       /* --- settings ----------------------------------------------------- */
       .settings {
-        margin-top: 12px;
-        border-top: 1px solid var(--hairline);
-        padding-top: 12px;
-      }
-      .settings[hidden] {
-        display: none;
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
       }
       label {
         display: block;
-        margin-bottom: 10px;
-        font-size: 12px;
-        font-weight: 500;
-        color: var(--muted);
+        margin-bottom: 11px;
+        font-size: 11px;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+        color: var(--ink-faint);
       }
       input,
       select {
         width: 100%;
-        margin-top: 4px;
-        padding: 9px 12px;
-        box-sizing: border-box;
+        margin-top: 5px;
+        padding: 9px 11px;
         font-family: var(--sans);
-        font-size: 14px;
+        font-size: 13px;
+        font-weight: 400;
+        text-transform: none;
+        letter-spacing: 0;
         color: var(--ink);
-        background: var(--canvas);
-        border: 1px solid var(--hairline);
-        border-radius: 8px;
+        background: var(--stage);
+        border: 1px solid var(--line-strong);
+        border-radius: 9px;
+        transition:
+          border-color 0.18s var(--ease),
+          box-shadow 0.18s var(--ease);
       }
       input:focus,
       select:focus {
         outline: none;
-        border-color: var(--primary);
-        box-shadow: 0 0 0 3px rgba(204, 120, 92, 0.15);
+        border-color: var(--coral);
+        box-shadow: 0 0 0 3px var(--coral-dim);
       }
-      .shortcut-note {
-        color: var(--muted-soft);
-        font-size: 12px;
+      .link-row {
+        margin: 0;
+        font-size: 11.5px;
       }
-      .shortcut-note button {
+      .link-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
         background: none;
         border: 0;
         padding: 0;
         font: inherit;
-        color: var(--primary);
+        color: var(--coral);
         cursor: pointer;
+      }
+      .link-btn:hover {
         text-decoration: underline;
       }
     </style>
@@ -291,29 +360,33 @@
   <body>
     <header>
       <span class="wordmark">Aalto</span>
-      <button type="button" class="icon-btn" id="settingsBtn" aria-expanded="false" title="Settings">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><title>Settings</title>
-          <circle cx="12" cy="12" r="3" />
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-        </svg>
-      </button>
+      <button
+        type="button"
+        class="ghost-btn"
+        id="settingsBtn"
+        aria-expanded="false"
+        aria-label="Settings"
+      ></button>
     </header>
 
-    <div class="stage" id="stage" title="Click to stop or start listening">
-      <span class="stage-label" id="stageLabel">Listening</span>
-      <canvas id="wave" width="656" height="128"></canvas>
-      <div class="spinner" id="spinner" hidden></div>
-      <div class="idle-hint" id="idleHint" hidden>
-        Click, or press <kbd id="shortcutHint">Alt+A</kbd>, then speak
+    <div class="stage">
+      <span class="stage-label" id="stageLabel"></span>
+
+      <button type="button" class="record" id="recordBtn" aria-label="Start listening"></button>
+      <canvas id="wave" width="592" height="124" hidden></canvas>
+      <span id="loader" class="loading" hidden></span>
+
+      <div class="record-hint" id="recordHint">
+        or press <kbd id="shortcutHint">Ctrl+Shift+A</kbd>
       </div>
-      <button type="button" class="icon-btn" id="speakerBtn" aria-pressed="false" title="Mute spoken replies">
-        <svg id="speakerIcon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><title>Spoken replies</title>
-          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-          <path id="waves1" d="M15.5 8.5a5 5 0 0 1 0 7" />
-          <path id="waves2" d="M18.5 5.5a9 9 0 0 1 0 13" />
-          <line id="muteSlash" x1="3" y1="3" x2="21" y2="21" />
-        </svg>
-      </button>
+
+      <button
+        type="button"
+        class="ghost-btn"
+        id="speakerBtn"
+        aria-pressed="false"
+        aria-label="Mute spoken replies"
+      ></button>
     </div>
 
     <section class="reply" id="reply" hidden>
@@ -324,17 +397,17 @@
 
     <section class="settings" id="settings" hidden>
       <label>
-        Server URL
+        Server
         <input type="text" id="serverUrl" value="http://localhost:8787" />
       </label>
       <label>
-        Request key (optional)
-        <input type="password" id="apiKey" placeholder="matches AALTO_API_KEY" />
+        Request key
+        <input type="password" id="apiKey" placeholder="optional" />
       </label>
       <label>
-        Language hint
+        Language
         <select id="langSelect">
-          <option value="">Auto</option>
+          <option value="">Detect automatically</option>
           <option value="en">English</option>
           <option value="yo">Yoruba</option>
           <option value="ig">Igbo</option>
@@ -343,11 +416,12 @@
           <option value="sw">Swahili</option>
         </select>
       </label>
-      <p class="shortcut-note">
-        Change the shortcut at <button type="button" id="shortcutLink">chrome://extensions/shortcuts</button>
+      <p class="link-row">
+        <button type="button" class="link-btn" id="shortcutLink">Change shortcut</button>
       </p>
     </section>
 
+    <script src="icons.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

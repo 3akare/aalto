@@ -149,7 +149,7 @@ function requestAutoStop(reason) {
     autoStopTimer = null;
   }, 500);
   stopMetering();
-  chrome.runtime.sendMessage({ type: "AUTO_STOP", reason, heardVoice })?.catch(() => {});
+  chrome.runtime.sendMessage({ type: "AUTO_STOP", reason, heardVoice })?.catch?.(() => {});
 }
 
 async function stopRecording() {
