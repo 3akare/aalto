@@ -188,15 +188,20 @@ export class IntronStreamSttProvider implements SttProvider {
     const useHint = opts.useLanguageHint !== false;
     const start = Date.now();
 
+    // 16KB is 0.5s of 16 kHz PCM16, comfortably inside the 1-32KB chunk window.
+    const CHUNK = 16 * 1024;
+    const paceMs = 500 / this.speedup;
+    const sendMs = Math.ceil(pcm.length / CHUNK) * paceMs;
+
+    // Scale the ceiling with the clip: a fixed timeout that suits a 6-second
+    // command will abandon a 6-minute recording mid-decode. Sending time plus a
+    // flat allowance for the server to finish committing.
     const stream = await openIntronStream({
       apiKey: this.apiKey,
       languageCode: useHint ? (opts.languageCode ?? "en") : "en",
       sampleRate: 16000,
+      sessionTimeoutMs: Math.max(120_000, sendMs + 240_000),
     });
-
-    // 16KB is 0.5s of 16 kHz PCM16, comfortably inside the 1-32KB chunk window.
-    const CHUNK = 16 * 1024;
-    const paceMs = 500 / this.speedup;
     for (let i = 0; i < pcm.length; i += CHUNK) {
       stream.sendChunk(pcm.subarray(i, Math.min(i + CHUNK, pcm.length)));
       await new Promise((r) => setTimeout(r, paceMs));

@@ -57,7 +57,15 @@ class RateLimiter {
   }
 }
 
-const RETRYABLE = /(^|\b)(429|5\d\d|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|timed out)\b/i;
+/**
+ * Transport-level failures, plus one content-level case that is genuinely
+ * transient: Intron loads a model per language and answers the first request for
+ * a cold language with "Required language not available for this session, please
+ * wait 30 seconds". Treating that as a hard failure would drop the first
+ * utterance of every language in the run.
+ */
+const RETRYABLE =
+  /(^|\b)(429|5\d\d|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|timed out)\b|required language not available/i;
 
 export class BenchmarkRunner {
   private limiters = new Map<string, RateLimiter>();
@@ -69,7 +77,7 @@ export class BenchmarkRunner {
     this.opts = {
       cacheDir: options.cacheDir,
       rateLimits: options.rateLimits ?? {},
-      maxRetries: options.maxRetries ?? 2,
+      maxRetries: options.maxRetries ?? 3,
       serial: options.serial ?? false,
     };
     mkdirSync(this.opts.cacheDir, { recursive: true });
@@ -113,7 +121,8 @@ export class BenchmarkRunner {
 
     let retryCount = 0;
     let lastError = "";
-    const backoffMs = [2000, 8000];
+    // Intron's language warm-up asks for 30 seconds; the later steps allow for it.
+    const backoffMs = [2000, 8000, 32_000];
 
     for (let attempt = 0; attempt <= this.opts.maxRetries; attempt++) {
       await this.limiter(provider.id).acquire();
