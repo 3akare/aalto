@@ -31,7 +31,8 @@ export interface TranscodeOptions {
    * declaring a 1.4GB length, another an invalid format code - and on a pipe
    * ffmpeg trusts the header, stops early and exits 0, silently yielding a
    * one-second file from a four-minute recording. Given a real file it can seek,
-   * recover the true extent, and decode the whole thing.
+   * recover the true extent, and decode the whole thing. Measured against this
+   * corpus, staging the file is the entire fix; -ignore_length changes nothing.
    */
   viaFile?: boolean;
 }
@@ -51,9 +52,6 @@ export async function toWav16kMono(input: Buffer, opts: TranscodeOptions = {}): 
     "-hide_banner",
     "-loglevel",
     "error",
-    // Trust the stream over the container header, so a wrong declared length
-    // does not cut the decode short.
-    ...(viaFile ? ["-ignore_length", "1"] : []),
     ...(inputFormat ? ["-f", inputFormat] : []),
     "-i",
     inputPath,

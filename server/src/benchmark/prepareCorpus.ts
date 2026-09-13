@@ -280,6 +280,7 @@ async function main(): Promise<void> {
 
   // --- Exclusions, sampling, manifest --------------------------------------
   const selected: ManifestRow[] = [];
+  const seenIds = new Set<string>();
 
   for (const [language, rows] of [...byLanguage.entries()].sort()) {
     const eligible = rows.filter((r) => {
@@ -338,10 +339,21 @@ async function main(): Promise<void> {
 
       for (let k = 0, i = start; k < want && i < ordered.length; k++, i += step) {
         const r = ordered[i];
-        const filename = String(r[cols.filename ?? ""] ?? `${language}-${i}`);
+        // Uniqueness matters more than prettiness here: a repeated id means two
+        // rows write the same .wav, and the second silently replaces the first
+        // while the manifest still describes both.
+        const audioPath = (r[cols.audio] as { path?: string } | undefined)?.path;
+        const filename = String(
+          r[cols.filename ?? ""] ??
+            (audioPath ? audioPath.replace(/\.[^.]+$/, "") : `${language}-${bi}-${i}`)
+        );
         const tagged = String(r[cols.tagged] ?? r[cols.transcription] ?? "");
+        let id = `${language}__${filename}`.replace(/[^A-Za-z0-9_.-]/g, "_");
+        if (seenIds.has(id)) id = `${id}__${seenIds.size}`;
+        seenIds.add(id);
+
         selected.push({
-          id: `${language}__${filename}`.replace(/[^A-Za-z0-9_.-]/g, "_"),
+          id,
           language,
           filename,
           duration: cols.duration ? Number(r[cols.duration]) : 0,
