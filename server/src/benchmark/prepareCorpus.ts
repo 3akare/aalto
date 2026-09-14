@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { downloadFile, listFiles } from "@huggingface/hub";
 import { parquetReadObjects } from "hyparquet";
@@ -246,16 +246,22 @@ async function main(): Promise<void> {
     const language = LANGUAGE_CODES[dirName.toLowerCase()] ?? dirName;
 
     const localPath = path.join(PARQUET_CACHE, file.path.replace(/[/\\]/g, "__"));
-    console.log(`[corpus] downloading ${file.path} ...`);
-    const res = await downloadFile({
-      repo: { type: "dataset", name: DATASET },
-      path: file.path,
-      credentials,
-    });
-    if (!res) throw new Error(`Download returned nothing for ${file.path}`);
-    const parquetBytes = Buffer.from(await res.arrayBuffer());
-    // Cached so a re-run of a later stage does not re-download several GB.
-    writeFileSync(localPath, parquetBytes);
+    let parquetBytes: Buffer;
+    if (existsSync(localPath)) {
+      console.log(`[corpus] using cached ${file.path} ...`);
+      parquetBytes = readFileSync(localPath);
+    } else {
+      console.log(`[corpus] downloading ${file.path} ...`);
+      const res = await downloadFile({
+        repo: { type: "dataset", name: DATASET },
+        path: file.path,
+        credentials,
+      });
+      if (!res) throw new Error(`Download returned nothing for ${file.path}`);
+      parquetBytes = Buffer.from(await res.arrayBuffer());
+      // Cached so a re-run of a later stage does not re-download several GB.
+      writeFileSync(localPath, parquetBytes);
+    }
 
     const rows: Row[] = await parquetReadObjects({
       file: parquetBytes.buffer.slice(
