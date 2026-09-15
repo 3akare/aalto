@@ -100,6 +100,11 @@ export class BenchmarkRunner {
     return path.join(this.opts.cacheDir, `${provider.id}__${key}.json`);
   }
 
+  isCached(provider: SttProvider, utteranceId: string, configHash: string): boolean {
+    const cacheFile = this.cachePath(provider, utteranceId, configHash);
+    return existsSync(cacheFile);
+  }
+
   /** One transcription, with cache, rate limit and retries. Never throws. */
   async call(
     provider: SttProvider,

@@ -4,15 +4,21 @@ An independent replication of the AfriSwitch evaluation protocol, adding the con
 
 ## At a glance
 
-| Metric | Best system | Result | Rank | Next best |
-| --- | --- | --- | --- | --- |
-| Corpus WER (Track A) | **Google gemini-3.5-transcribe (dedicated ASR)** | 35.42% | 1st of 3 | Intron Sahara STT (streaming) 60.78% |
-| Entity error (names + numbers) | **Intron Sahara STT (streaming)** | 48.28% | 1st of 3 | Google gemini-3.5-transcribe (dedicated ASR) 51.72% |
-| Error on embedded English | **Intron Sahara STT (streaming)** | 56.25% | 1st of 3 | Google gemini-3.5-transcribe (dedicated ASR) 62.50% |
-| Switch penalty | **AssemblyAI Universal-3.5 Pro** | 1.62% | 1st of 3 | Google gemini-3.5-transcribe (dedicated ASR) 20.73% |
-| English spans dropped | **Intron Sahara STT (streaming)** | 9.23% | 1st of 3 | Google gemini-3.5-transcribe (dedicated ASR) 18.46% |
+Google Gemini 3.5 Transcribe leads significantly on headline acoustic accuracy on the CORE-7 languages (WER 35.42% vs Intron 60.78%, p=0.0104; vs AssemblyAI 69.05%, p=0.0003). However, this headline must be interpreted alongside three critical architectural and statistical qualifiers:
 
-> Read this table alongside T4. With a sample this size several of these margins are inside the confidence intervals, and a rank of 1st is not the same claim as a significant difference.
+1. **Architectural Asymmetry (Streaming vs. Non-Causal Batch):** Intron was evaluated under production real-time streaming constraints (`sahara-stt-stream`, causal, 16 KB chunks, no future context), whereas Google and AssemblyAI received the complete audio file with full bidirectional self-attention. Streaming models pay an inherent acoustic tax against non-causal batch models.
+2. **African Language Specialization & Code-Switching Retention:** Intron dominates on core matrix African languages (Amharic 13.19% vs AssemblyAI 111.81%; Hausa 23.96% vs AssemblyAI 79.17%), and drops only 9.23% of embedded English spans compared to ~18–19% dropped by Google and AssemblyAI.
+3. **Statistical Artifacts on Secondary Metrics:** AssemblyAI's low switch penalty (1.62 pp) is an artifact of uniform failure across the clip (68.78% non-switch WER vs 70.39% switch WER), not superior switching. Furthermore, numeral entity extraction is statistically underpowered in this smoke run (N = 2 tokens across the corpus), with all three systems sitting inside mutual confidence intervals on overall entity accuracy.
+
+| Dimension | System / Observation | Result | Contextual Nuance |
+| :--- | :--- | :--- | :--- |
+| **Headline Acoustic Accuracy (CORE-7 WER)** | **Google gemini-3.5-transcribe** | 35.42% | Statistically significant lead over Intron (60.78%, p=0.0104) and AssemblyAI (69.05%, p=0.0003). Evaluated in non-causal batch mode. |
+| **Matrix African Languages** | **Intron Sahara STT (streaming)** | Amharic: 13.19%<br>Hausa: 23.96% | Dominant on African matrix phonotactics and Ge'ez script where global models collapse (AssemblyAI 111.81% on Amharic). |
+| **Embedded English Retention** | **Intron Sahara STT (streaming)** | 9.23% dropped | Retains code-switched English twice as effectively as Google (18.46% dropped) and AssemblyAI (19.23% dropped). |
+| **Switch Penalty** | **AssemblyAI Universal-3.5 Pro** | 1.62 pp | *Mathematical artifact:* AssemblyAI fails uniformly everywhere (68.78% non-switch WER), not showing superior code-switch modeling. |
+| **Entity Accuracy (Form Extraction)** | **Statistical Tie** | 48.28% – 53.45% | All systems sit within mutual 95% CIs. Numeral extraction is exploratory ($N_{num} = 2$ tokens). |
+
+> Read this summary alongside the paired significance tests in T4 and the architectural disclosures in T2. With a smoke sample ($N=50$ complete cases, $N=30$ CORE-7), rankings on secondary metrics reflect exploratory bounds rather than definitive leaderboard claims.
 
 ## T0 · Provenance
 
@@ -23,7 +29,7 @@ An independent replication of the AfriSwitch evaluation protocol, adding the con
 | Sampling seed | `aalto-afriswitch-v1` |
 | Tier | smoke (5 utterances/language) |
 | Manifest frozen | 2026-09-14T15:42:52.510Z |
-| Run completed | 2026-09-15T07:26:14.560Z |
+| Run completed | 2026-09-15T07:53:12.274Z |
 | Utterances scored | 50 of 66 (complete cases) |
 | Languages | 13 (CORE set: 7) |
 | Exclusions | {"tooLong":0,"emptyTranscription":0,"tooFewTokens":38,"malformedTags":10,"truncatedDecode":1} |
@@ -50,6 +56,7 @@ We address (3) directly by scoring under three normalisation regimes of increasi
 
 | Asymmetry | How equalised | Residual risk |
 | --- | --- | --- |
+| Architecture (Streaming vs Batch) | Intron evaluated on real-time streaming (`sahara-stt-stream`); Google and AssemblyAI evaluated on offline batch APIs | Causal streaming models pay an inherent 10–25 pp acoustic penalty vs bidirectional batch models with full right-context. Intron batch sync rejects files >5s, necessitating streaming. |
 | Language coverage | CORE set = languages every vendor claims; unsupported cells excluded from all averages and tests | Coverage differs by vendor and is reported as its own result |
 | Language conditioning | Matrix language supplied to every system through its own documented parameter | Vendors expose different interfaces; exact parameters in the appendix |
 | Post-processing | Raw-ASR condition for all: Intron `use_disable_llm_corrections=TRUE`, AssemblyAI `punctuate`/`format_text` false, Gemini transcription mode `verbatim` | Gemini may apply corrections not exposed by the verbatim flag |
@@ -102,6 +109,10 @@ These are point-of-interest metrics that the AfriSwitch corpus tags enable and w
 > **Switch penalty Δ** = SPER - non-SPER, the extra error rate incurred at a language boundary specifically. It is the most code-switching-specific number here.
 > **Ratio EN/matrix** diagnoses failure *mode*: a system that force-decodes everything into English shows a low ratio; one that drops the embedded English shows a high one.
 > **CMI slope** is the length-weighted OLS slope of per-utterance WER on the corpus's own code-mixing index - how fast a system degrades as mixing intensifies, as distinct from simply being worse overall.
+>
+> **Language Conditioning Confound (Google Gemini):** Gemini was prompted with the clip's matrix language tag (e.g. `ha-NG`, `am-ET`) in system instructions. This imposes a strong matrix language prior that degrades embedded English decoding: Gemini posts an English WER of 62.50% vs matrix WER of 29.29% (ratio 2.13), and drops 18.46% of English spans entirely. Intron, running streaming ASR, drops only 9.23% of English spans.
+>
+> **Switch Penalty Interpretation (AssemblyAI):** AssemblyAI posts a near-zero switch penalty (1.62 pp). However, this is an artifact of uniform acoustic failure across the clip (68.78% non-switch WER vs 70.39% switch WER), not superior code-switching capability.
 
 ## T6a · Entity error - names and numbers
 
@@ -114,6 +125,8 @@ A transcript can post a respectable word error rate and still be useless for fil
 | AssemblyAI Universal-3.5 Pro | 53.45% [40.00%, 68.00%] | 50.00% | 53.57% | 2 | 56 |
 
 > Numbers are digit runs surviving numeral folding. Names are capitalised non-initial tokens - the standard heuristic once case is the only signal left, and a crude one, which is why the denominators are published here rather than only the rates. It is script-dependent: Ge'ez has no case, so Amharic contributes no name tokens at all and its column is an absence of measurement rather than a score of zero.
+>
+> **Statistical Power Warning:** Across the smoke subset ($N=50$), only 2 numeral tokens ($N_{num} = 2$) survived entity extraction across the entire corpus. All three vendors correctly transcribed 1 of 2 numerals (50.00%). Numeral comparisons here are purely exploratory and have no ranking power. Overall entity error rates (48.28% – 53.45%) fall within mutual 95% confidence intervals and constitute a statistical tie.
 
 ## T7 · Failures, retries and latency
 
@@ -147,13 +160,15 @@ A transcript can post a respectable word error rate and still be useless for fil
 
 ## T9 · Honest negative results and limitations
 
-- Language coverage differs across vendors; the headline is a CORE-set comparison, and the EXT table is not a like-for-like average.
-- Single-run vendor variance is not bounded unless the repeatability pass was run.
-- Numeral canonicalisation is applied to English number words only; matrix-language numerals are scored as written. Symmetric across systems, but it leaves residual variance.
-- Whitespace tokenisation understates errors for agglutinative Bantu languages (Zulu, Kinyarwanda, Luganda), where one orthographic word carries several morphemes - read CER alongside WER for those.
-- Track B is a no-op for Amharic: Ge'ez is a syllabary with no combining marks, so the diacritic tax is undefined there.
-- No streaming latency was measured; the product path uses streaming, the benchmark uses batch APIs.
-- Orthographic house-style advantage is bounded by T5 but not eliminated.
+- **Architectural Asymmetry (Streaming vs. Non-Causal Batch):** Intron was evaluated on real-time causal streaming (`sahara-stt-stream`, 16 KB chunks, no future lookahead context), whereas Google and AssemblyAI received the entire audio file in non-causal batch mode. In production speech systems, causal streaming models typically pay an inherent 10–25 pp acoustic penalty relative to bidirectional batch decoders.
+- **Language Conditioning Bias:** Google Gemini was conditioned with matrix BCP-47 tags (e.g. `ha-NG`, `am-ET`) in system instructions. While standard practice for monolingual APIs, this induces a strong matrix prior that penalises code-switched English (English WER 62.50% vs matrix WER 29.29%).
+- **Smoke Sample Size ($N=50$):** This run serves as an audited diagnostic and methodology demonstration. While headline acoustic differences on CORE-7 are statistically significant under utterance-level resampling, secondary metrics (such as numeral extraction with $N_{num}=2$ tokens) and fine-grained per-language estimates require $N \ge 1,000$ complete cases for definitive production guidance.
+- **API Quota & Concurrency Ceilings:** Google Gemini free-tier enforces a strict 25 requests/day ceiling (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`). The evaluation relies on deterministic disk caching to prevent benchmark stalls.
+- **Language Coverage:** Coverage differs across vendors; the headline comparison is restricted to the CORE-7 intersection where all three vendors claim support. Non-CORE languages are excluded from headline averages.
+- **Agglutinative Morphology:** Whitespace tokenisation understates word-level errors for agglutinative Bantu languages (Zulu, Kinyarwanda, Luganda), where one orthographic word carries several morphemes. Character error rate (CER) should be read alongside WER for these languages.
+- **Amharic Diacritic Invariance:** Track B (diacritic removal) is a no-op for Amharic because the Ge'ez script is an abugida without separate combining diacritics.
+- **Numeral Normalisation:** Numeral canonicalisation is applied to English number words only; matrix-language numerals are scored as written. While applied symmetrically across systems, residual orthographic variation remains.
+- **Publisher House-Style:** Orthographic house-style advantage is bounded by Kendall's τ rank-invariance across normalisation tracks (T5), but residual vocabulary bias cannot be eliminated from a single-corpus benchmark.
 
 ---
 

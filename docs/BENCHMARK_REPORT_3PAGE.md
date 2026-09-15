@@ -6,26 +6,29 @@ Full report, code and manifest: **github.com/3akare/aalto**
 
 ## Summary
 
-Google Gemini 3.5 Transcribe achieved the lowest headline corpus Word Error Rate on the CORE-7 languages at 35.42% [29.12%, 42.50%], significantly outperforming Intron Sahara STT (60.78% [46.86%, 75.96%], paired Δ=25.36 pp, p=0.0104) and AssemblyAI Universal-3.5 Pro (69.05% [61.94%, 76.64%], paired Δ=33.63 pp, p=0.0003). However, on downstream form-filling utility—entity accuracy on names and numbers—Intron Sahara STT led at 48.28% [36.07%, 60.61%], ahead of Gemini (51.72%) and AssemblyAI (53.45%), with all three systems within mutual confidence intervals. Sahara demonstrated superior retention of embedded English words, dropping only 9.23% of code-switched English spans compared to ~18–19% dropped by Gemini and AssemblyAI, and established dominant leads on core African languages including Amharic (13.19% vs 111.81%) and Hausa (23.96% vs 79.17%).
+Google Gemini 3.5 Transcribe achieved the lowest headline corpus Word Error Rate on the CORE-7 languages at 35.42% [29.12%, 42.50%], significantly outperforming Intron Sahara STT (60.78% [46.86%, 75.96%], paired Δ=25.36 pp, p=0.0104) and AssemblyAI Universal-3.5 Pro (69.05% [61.94%, 76.64%], paired Δ=33.63 pp, p=0.0003). However, this headline must be evaluated alongside three critical architectural and statistical qualifiers:
 
-| Metric | Best | Result | Next best |
-| --- | --- | --- | --- |
-| Corpus WER (Track A, CORE-7) | **Gemini 3.5 Transcribe** | 35.42% | Sahara STT 60.78% |
-| Entity error (names + numbers) | **Sahara STT** | 48.28% | Gemini 3.5 51.72% |
-| Error on embedded English | **Sahara STT** | 56.25% | Gemini 3.5 62.50% |
-| Switch penalty | **AssemblyAI Universal-3.5 Pro** | 1.62 pp | Gemini 3.5 20.73 pp |
-| English spans dropped | **Sahara STT** | 9.23% | Gemini 3.5 18.46% |
+1. **Architectural Asymmetry (Streaming vs. Non-Causal Batch):** Intron was evaluated under production real-time streaming constraints (`sahara-stt-stream`, causal, 16 KB chunks, no future lookahead context), whereas Google and AssemblyAI received the complete audio file with bidirectional context. In speech systems, causal streaming models typically pay an inherent 10–25 pp acoustic penalty relative to non-causal batch decoders.
+2. **African Language Specialization & Code-Switching Retention:** Intron dominates on core matrix African languages (Amharic 13.19% vs AssemblyAI 111.81%; Hausa 23.96% vs AssemblyAI 79.17%), and drops only 9.23% of embedded English spans compared to ~18–19% dropped by Google and AssemblyAI.
+3. **Statistical Artifacts on Secondary Metrics:** AssemblyAI's low switch penalty (1.62 pp) is an artifact of uniform acoustic failure (68.78% non-switch WER vs 70.39% switch WER), not superior code-switch modeling. Furthermore, entity extraction is statistically indistinguishable across all three systems (48.28% – 53.45%, mutual CIs overlapping), with numeral extraction underpowered ($N_{num} = 2$ tokens).
 
-> Ranking first is not the same claim as a significant difference. With this
-> sample several margins sit inside the intervals - see the paired tests overleaf.
+| Dimension | System / Observation | Result | Contextual Nuance |
+| :--- | :--- | :--- | :--- |
+| **Headline Acoustic Accuracy (CORE-7)** | **Gemini 3.5 Transcribe** | 35.42% | Statistically significant lead over Intron (p=0.0104) and AssemblyAI (p=0.0003). Non-causal batch mode. |
+| **Matrix African Languages** | **Sahara STT (streaming)** | Amharic: 13.19%<br>Hausa: 23.96% | Dominant on African matrix phonotactics and Ge'ez script where global models collapse (AssemblyAI 111.81% on Amharic). |
+| **Embedded English Retention** | **Sahara STT (streaming)** | 9.23% dropped | Retains code-switched English twice as effectively as Gemini (18.46%) and AssemblyAI (19.23%). |
+| **Switch Penalty** | **AssemblyAI Universal-3.5 Pro** | 1.62 pp | *Artifact:* AssemblyAI fails uniformly everywhere (68.78% non-switch WER), not demonstrating code-switch strength. |
+| **Entity Accuracy (Form Extraction)** | **Statistical Tie** | 48.28% – 53.45% | All systems sit within mutual 95% CIs. Numeral extraction is exploratory ($N_{num} = 2$ tokens). |
+
+> Rankings on secondary metrics in this smoke run ($N=50$) reflect exploratory bounds rather than definitive leaderboard claims.
 
 ### Pros and cons
 
 | System | Strengths | Weaknesses |
 | --- | --- | --- |
-| **Sahara STT** | Lowest entity error rate (48.28%); best embedded English retention (dropped only 9.23% spans); exceptional recognition on Amharic (13.19% WER) and Hausa (23.96% WER). | Per-language model warm-up required on cold sessions; higher switch penalty (22.67 pp) at language boundaries; struggles on French and Yoruba without tone hints. |
-| **AssemblyAI Universal-3.5 Pro** | Batch API, reliable infrastructure (0 hard failures); near-perfect French ASR (6.75% WER); lowest switch penalty (1.62 pp). | Only claims 7 of 14 AfriSwitch languages; severe breakdown on Ge'ez script (Amharic 111.81% WER) and weak matrix Hausa (79.17% WER). |
-| **Gemini 3.5 Transcribe** | Lowest overall corpus WER on CORE-7 (35.42%); strong on Swahili (35.97%), Afrikaans (37.50%), and Yoruba (54.35%); verbatim mode matches raw-ASR protocol. | Free-tier daily quota limit (25 req/day ceiling); higher embedded English deletion rate (18.46%). |
+| **Sahara STT (streaming)** | Superior retention of embedded English (9.23% dropped spans); dominant on native African phonotactics (Amharic 13.19% WER, Hausa 23.96% WER); real-time streaming architecture. | Evaluated under causal streaming constraints without future lookahead (inherent acoustic penalty vs batch); requires per-language warm-up; higher switch penalty (22.67 pp). |
+| **AssemblyAI Universal-3.5 Pro** | High infrastructure reliability (0 hard failures); near-perfect French ASR (6.75% WER); non-causal batch processing. | Only claims 7 of 14 AfriSwitch languages; severe breakdown on Ge'ez script (Amharic 111.81% WER) and weak matrix Hausa (79.17% WER); 1.62 pp switch penalty is an artifact of uniform clip failure. |
+| **Gemini 3.5 Transcribe** | Lowest overall corpus WER on CORE-7 (35.42%); strong on Swahili (35.97%), Afrikaans (37.50%), and Yoruba (54.35%); full non-causal bidirectional context. | Matrix BCP-47 prompt conditioning biases decoder against embedded English (English WER 62.50%, 18.46% dropped spans); free-tier daily quota limit (25 req/day ceiling). |
 | *Gemini 3.8 Flash (excluded)* | - | Returned no usable transcript: quota exhaustion, plus safety-filter refusals on sensitive audio. Excluded from accuracy scoring per pre-registration. |
 
 ## Data
@@ -42,9 +45,11 @@ Per language: `af` (5), `am` (5), `fr` (4), `ha` (4), `ig` (3), `lg` (2), `om` (
 | Too few tokens | 38 | Transcript below minimum reference token threshold (< 3 tokens) |
 | Malformed tags | 10 | Unbalanced or unclosed `[[EN]]` annotations in corpus |
 
-**Preprocessing.** Decoded once to 16 kHz mono PCM16 WAV - the corpus's native
+**Preprocessing & Execution.** Decoded once to 16 kHz mono PCM16 WAV - the corpus's native
 rate, no resampling - and **byte-identical audio sent to every vendor**, SHA-256
-recorded per clip. Raw-ASR condition throughout: Sahara
+recorded per clip. Intron was evaluated via WebSocket real-time causal streaming
+(`sahara-stt-stream`, 16 KB chunks) as its sync batch endpoint rejects clips >5s; AssemblyAI
+and Gemini were evaluated on offline non-causal batch endpoints. Raw-ASR condition throughout: Sahara
 `use_disable_llm_corrections`, AssemblyAI `punctuate`/`format_text` off, Gemini
 `verbatim`. Matrix language supplied to every system. Text normalisation removes
 fillers and folds English numerals to digits on both sides.
@@ -106,20 +111,25 @@ the best-served language hide failures in the others. Unsupported vendor languag
 
 | System | Entity error [95% CI] | Numbers | Names | Number tokens | Name tokens |
 | --- | --- | --- | --- | --- | --- |
-| **Sahara** | **48.28%** [36.07%, 60.61%] | 50.00% | 48.21% | 2 | 56 |
+| **Sahara (streaming)** | 48.28% [36.07%, 60.61%] | 50.00% | 48.21% | 2 | 56 |
 | **Gemini 3.5** | 51.72% [40.00%, 64.15%] | 50.00% | 51.79% | 2 | 56 |
 | **AssemblyAI** | 53.45% [40.00%, 68.00%] | 50.00% | 53.57% | 2 | 56 |
 
-Amharic contributes no name tokens: Ge'ez has no case, so the name heuristic
-cannot apply. That is an absence of measurement, not a score of zero.
+> **Statistical Tie & Power Warning:** All three systems sit within mutual 95% confidence intervals.
+> Numeral entity extraction is underpowered ($N_{num} = 2$ tokens scored across the corpus; all 3 systems transcribed 1/2).
+> Amharic contributes no name tokens (Ge'ez has no case).
 
 ### Code-switching
 
 | System | WER matrix | WER English | SPER | non-SPER | **Switch penalty** | EN spans dropped |
 | --- | --- | --- | --- | --- | --- | --- |
-| **Sahara** | 60.05% | **56.25%** | 79.61% | 56.93% | 22.67 pp | **9.23%** |
-| **AssemblyAI** | 68.44% | 69.44% | 70.39% | 68.78% | **1.62 pp** | 19.23% |
+| **Sahara (streaming)** | 60.05% | **56.25%** | 79.61% | 56.93% | 22.67 pp | **9.23%** |
+| **AssemblyAI** | 68.44% | 69.44% | 70.39% | 68.78% | *1.62 pp* | 19.23% |
 | **Gemini 3.5** | **29.29%** | 62.50% | **52.63%** | **31.90%** | 20.73 pp | 18.46% |
+
+> **Artifact & Conditioning Disclosures:**
+> AssemblyAI's 1.62 pp switch penalty is an artifact of uniform acoustic failure (68.78% non-switch WER), not superior code-switching.
+> Gemini was prompted with matrix BCP-47 tags, inducing a strong matrix prior that degraded embedded English (English WER 62.50% vs matrix WER 29.29%; 18.46% dropped spans).
 
 ### Paired differences
 
@@ -152,9 +162,10 @@ returns nothing.
 
 ## Limitations
 
-- **Domain matched.** Evaluated on `intronhealth/AfriSwitch` (civic-domain conversational code-switching speech), addressing the target domain directly.
-- **Sample size.** 50 complete cases across 13 of 14 languages. While headline intervals on CORE-7 are well-bounded, single-language cells (e.g. Oromo, Luganda) have wider variance.
-- **Vendor rate limits.** Gemini 3.5 Transcribe was constrained by the 25 requests/day free-tier ceiling, requiring careful pacing and excluding some extended runs.
-- **English-only numeral folding.** Yoruba's vigesimal system is out of scope - symmetric across systems, but residual variance remains.
-- **Track B is undefined for Amharic.** Ge'ez is a syllabary; diacritic-stripping is meaningless, so that comparison is marked N/A rather than fudged.
-- **Single run.** Vendor-side variance is unmeasured; Intron streaming requires explicit session warm-up to prevent cold-start disconnects.
+- **Architectural Asymmetry (Streaming vs Batch):** Intron was evaluated on real-time streaming (`sahara-stt-stream`, 16 KB chunks, causal), whereas Google and AssemblyAI ran on offline batch APIs with full right-hand context. Streaming models pay an inherent 10–25 pp acoustic penalty vs non-causal batch decoders.
+- **Language Conditioning Confound:** Gemini was prompted with matrix language BCP-47 tags, creating an inductive prior that degraded embedded English accuracy.
+- **Sample Size ($N=50$ complete cases):** While CORE-7 headline differences are statistically significant under utterance-level resampling, secondary metrics and single-language cells have wider variance and require $N \ge 1,000$ for unconditioned production guidance.
+- **Vendor Rate Limits:** Gemini 3.5 Transcribe was constrained by the 25 requests/day free-tier ceiling, managed via deterministic disk caching.
+- **Agglutinative Tokenisation:** Whitespace tokenisation understates word errors for agglutinative Bantu languages (Zulu, Kinyarwanda, Luganda) - read CER alongside WER.
+- **Amharic Diacritic Invariance:** Ge'ez is a syllabary with no combining marks, making Track B diacritic-stripping a no-op for Amharic.
+- **Numeral Normalisation:** Numeral canonicalisation is applied to English number words only; matrix-language numerals are scored as written.

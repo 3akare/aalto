@@ -176,17 +176,22 @@ async function main(): Promise<void> {
 
   const intron = providers.find((p) => p.id === "intron");
   if (intron) {
-    const shortestPerLanguage = new Map<string, { id: string; audio: () => Buffer }>();
-    for (const r of [...rows].sort((a, b) => a.duration - b.duration)) {
-      if (!shortestPerLanguage.has(r.language)) {
-        shortestPerLanguage.set(r.language, {
-          id: r.id,
-          audio: () => readFileSync(path.join(SAMPLES_DIR, `${r.id}.wav`)),
-        });
+    const hasUncached = rows.some((r) => !runner.isCached(intron, r.id, hash));
+    if (hasUncached) {
+      const shortestPerLanguage = new Map<string, { id: string; audio: () => Buffer }>();
+      for (const r of [...rows].sort((a, b) => a.duration - b.duration)) {
+        if (!shortestPerLanguage.has(r.language)) {
+          shortestPerLanguage.set(r.language, {
+            id: r.id,
+            audio: () => readFileSync(path.join(SAMPLES_DIR, `${r.id}.wav`)),
+          });
+        }
       }
+      console.log(`[benchmark] warming ${shortestPerLanguage.size} language model(s) ...`);
+      await warmIntronLanguages(intron, shortestPerLanguage);
+    } else {
+      console.log("[benchmark] all Intron requests cached, skipping language warmup.");
     }
-    console.log(`[benchmark] warming ${shortestPerLanguage.size} language model(s) ...`);
-    await warmIntronLanguages(intron, shortestPerLanguage);
   }
 
   const results = await runner.runAll(
