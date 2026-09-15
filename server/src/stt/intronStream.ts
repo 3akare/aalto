@@ -148,7 +148,9 @@ export function openIntronStream(opts: IntronStreamOptions): Promise<IntronStrea
         case "QUOTA_EXCEEDED":
         case "SESSION_TIME_LIMIT_EXCEEDED":
         case "INSUFFICIENT_AUDIO_ACTIVITY":
-          settle({ error: new Error(msg.message ?? msg.message_type) });
+          settle({
+            error: new Error(msg.message || `${msg.message_type}: ${msg.status || "ERROR"}`),
+          });
           break;
       }
     });

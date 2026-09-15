@@ -42,8 +42,8 @@ const BOOTSTRAP_ITERATIONS = 10_000;
  */
 const RATE_LIMITS: Record<string, number> = {
   intron: 30,
-  "gemini-transcribe": 8,
-  "gemini-flash": 8,
+  "gemini-transcribe": 4,
+  "gemini-flash": 4,
 };
 
 /**

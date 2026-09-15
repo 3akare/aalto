@@ -65,7 +65,7 @@ class RateLimiter {
  * utterance of every language in the run.
  */
 const RETRYABLE =
-  /(^|\b)(429|5\d\d|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|timed out)\b|required language not available/i;
+  /(^|\b)(429|5\d\d|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|timed out)\b|required language not available|FIN must be set|closed before committing|fetch failed/i;
 
 export class BenchmarkRunner {
   private limiters = new Map<string, RateLimiter>();
@@ -146,11 +146,17 @@ export class BenchmarkRunner {
         lastError = err instanceof Error ? err.message : String(err);
         // Retry only on transport-level failures. A 4xx content error is a real
         // result about the vendor, not a blip, and retrying it would hide that.
-        if (attempt < this.opts.maxRetries && RETRYABLE.test(lastError)) {
+        if (
+          attempt < this.opts.maxRetries &&
+          RETRYABLE.test(lastError) &&
+          !/PerDay|PerProject|GenerateRequestsPerDay/i.test(lastError)
+        ) {
           retryCount++;
-          await new Promise((r) =>
-            setTimeout(r, backoffMs[Math.min(attempt, backoffMs.length - 1)])
-          );
+          const retryMatch = lastError.match(/retry in ([\d.]+)s/i);
+          const waitMs = retryMatch
+            ? Math.ceil(Number(retryMatch[1]) * 1000) + 2000
+            : backoffMs[Math.min(attempt, backoffMs.length - 1)];
+          await new Promise((r) => setTimeout(r, waitMs));
           continue;
         }
         break;
