@@ -338,13 +338,16 @@ async function main(): Promise<void> {
       nameTokens: pick(s.entityName).reduce(addCounts, ZERO).N,
     });
 
+    const supportedLangs = languages.filter((l) => p.supportedLanguages.has(l));
     input.headline.push({
       providerId: p.id,
       werA: ciA,
       werB: ciB,
       diacriticTax: ciA.point - ciB.point,
-      macroA: macroAverage(s.counts.A, strata, coreLanguages),
-      coverage: `${languages.filter((l) => p.supportedLanguages.has(l)).length}/${languages.length}`,
+      macroCoreA: macroAverage(s.counts.A, strata, coreLanguages),
+      macroAllA: macroAverage(s.counts.A, strata, supportedLangs),
+      supportedCount: supportedLangs.length,
+      coverage: `${supportedLangs.length}/${languages.length}`,
     });
 
     const englishRate = rate(pick(s.english).reduce(addCounts, ZERO));

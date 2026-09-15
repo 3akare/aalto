@@ -29,7 +29,9 @@ export interface ReportInput {
     werA: Interval;
     werB: Interval;
     diacriticTax: number;
-    macroA: number;
+    macroCoreA: number;
+    macroAllA: number;
+    supportedCount: number;
     coverage: string;
   }[];
   perLanguage: {
@@ -80,6 +82,7 @@ export interface ReportInput {
 }
 
 const pct = (v: number) => (Number.isFinite(v) ? `${(v * 100).toFixed(2)}%` : "n/a");
+const pp = (v: number) => (Number.isFinite(v) ? `${(v * 100).toFixed(2)} pp` : "n/a");
 const num = (v: number, dp = 3) => (Number.isFinite(v) ? v.toFixed(dp) : "n/a");
 const ci = (i: Interval) =>
   Number.isFinite(i.point) ? `${pct(i.point)} [${pct(i.lo)}, ${pct(i.hi)}]` : "n/a";
@@ -241,20 +244,23 @@ export function renderReport(r: ReportInput): string {
   out.push(`## T3 · Headline - CORE-${r.coreLanguages.length} corpus WER`);
   out.push("");
   out.push(
-    "| System | Track A (diacritic-sensitive) | Track B (diacritic-insensitive) | Diacritic tax | Macro-avg (A) | Coverage |"
+    "| System | Track A (diacritic-sensitive) | Track B (diacritic-insensitive) | Diacritic tax | Macro-avg (CORE-7) | Macro-avg (All supported) | Coverage |"
   );
-  out.push("| --- | --- | --- | --- | --- | --- |");
+  out.push("| --- | --- | --- | --- | --- | --- | --- |");
   for (const h of [...r.headline].sort((a, b) => a.werA.point - b.werA.point)) {
     out.push(
-      `| ${name(h.providerId)} | ${ci(h.werA)} | ${ci(h.werB)} | ${pct(h.diacriticTax)} | ${pct(h.macroA)} | ${h.coverage} |`
+      `| ${name(h.providerId)} | ${ci(h.werA)} | ${ci(h.werB)} | ${pp(h.diacriticTax)} | ${pct(h.macroCoreA)} | ${pct(h.macroAllA)} (${h.supportedCount} langs) | ${h.coverage} |`
     );
   }
   out.push("");
   out.push(
     "> **Diacritic tax** = Track A WER - Track B WER: how much of a system's apparent error is " +
-      "orthographic convention rather than recognition. A near-zero tax for one vendor while " +
-      "others pay 8-15 points would quantify a house-style advantage rather than merely " +
-      "suspecting one."
+      "orthographic convention rather than recognition. Reported in percentage points (pp).\n" +
+      "> **Macro-avg (CORE-7)** is computed strictly across the 7 intersection languages shared by all three systems " +
+      "(`af`, `am`, `fr`, `ha`, `sn`, `sw`, `yo`), providing an unconfounded like-for-like macro average where every system " +
+      "is evaluated on the exact same languages.\n" +
+      "> **Macro-avg (All supported)** shows the unaligned macro-average across all languages claimed by each vendor; " +
+      "these unaligned averages cannot be compared directly as they span different language pools."
   );
   out.push("");
 
@@ -311,18 +317,18 @@ export function renderReport(r: ReportInput): string {
   );
   out.push("");
   out.push(
-    "| System | WER matrix | WER English | Ratio EN/matrix | SPER | non-SPER | Switch penalty Δ | EN spans deleted | CMI slope |"
+    "| System | WER matrix | WER English | Ratio EN/matrix | SPER | non-SPER | Switch penalty Δ (pp) | EN spans deleted | CMI slope |"
   );
   out.push("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
   for (const c of r.codeSwitching) {
     out.push(
-      `| ${name(c.providerId)} | ${pct(c.werMatrix)} | ${pct(c.werEnglish)} | ${num(c.ratio, 2)} | ${pct(c.sper)} | ${pct(c.nonSper)} | ${pct(c.switchPenalty)} | ${pct(c.spanDeletionRate)} | ${num(c.cmiSlope, 5)} |`
+      `| ${name(c.providerId)} | ${pct(c.werMatrix)} | ${pct(c.werEnglish)} | ${num(c.ratio, 2)} | ${pct(c.sper)} | ${pct(c.nonSper)} | ${pp(c.switchPenalty)} | ${pct(c.spanDeletionRate)} | ${num(c.cmiSlope, 5)} |`
     );
   }
   out.push("");
   out.push(
     "> **Switch penalty Δ** = SPER - non-SPER, the extra error rate incurred at a language " +
-      "boundary specifically. It is the most code-switching-specific number here.\n" +
+      "boundary specifically, reported in percentage points (pp). It is the most code-switching-specific number here.\n" +
       "> **Ratio EN/matrix** diagnoses failure *mode*: a system that force-decodes everything " +
       "into English shows a low ratio; one that drops the embedded English shows a high one.\n" +
       "> **CMI slope** is the length-weighted OLS slope of per-utterance WER on the corpus's own " +

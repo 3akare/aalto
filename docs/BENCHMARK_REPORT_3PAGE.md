@@ -103,9 +103,9 @@ is a ratio of sums, never a mean of per-utterance ratios.
 | Afrikaans (`af`) | 5 | 54.41% | 55.15% | **37.50%** |
 | Shona (`sn`) | 4 | 116.46% | 100.00% | **77.22%** |
 | **Macro-average (CORE-7)** | | 62.42% | 72.70% | **38.59%** |
+| Macro-average (All supported) | | 65.02% (13 langs) | 72.70% (7 langs) | 44.95% (10 langs) |
 
-Macro-average weights each language equally. A corpus-weighted average would let
-the best-served language hide failures in the others. Unsupported vendor languages (Igbo, Luganda, Oromo, Pidgin, Kinyarwanda, Tswana) are excluded from CORE-7.
+Macro-average (CORE-7) weights the 7 intersection languages equally for a strict like-for-like comparison. Macro-average (All supported) reflects each vendor's full claimed language catalog; these unaligned averages cannot be compared directly as their language pools differ. Unsupported vendor languages (Igbo, Luganda, Oromo, Pidgin, Kinyarwanda, Tswana) are excluded from CORE-7.
 
 ### Downstream task - entity accuracy
 
@@ -121,7 +121,7 @@ the best-served language hide failures in the others. Unsupported vendor languag
 
 ### Code-switching
 
-| System | WER matrix | WER English | SPER | non-SPER | **Switch penalty** | EN spans dropped |
+| System | WER matrix | WER English | SPER | non-SPER | **Switch penalty (pp)** | EN spans dropped |
 | --- | --- | --- | --- | --- | --- | --- |
 | **Sahara (streaming)** | 60.05% | **56.25%** | 79.61% | 56.93% | 22.67 pp | **9.23%** |
 | **AssemblyAI** | 68.44% | 69.44% | 70.39% | 68.78% | *1.62 pp* | 19.23% |

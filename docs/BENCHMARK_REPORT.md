@@ -29,7 +29,7 @@ Google Gemini 3.5 Transcribe leads significantly on headline acoustic accuracy o
 | Sampling seed | `aalto-afriswitch-v1` |
 | Tier | smoke (5 utterances/language) |
 | Manifest frozen | 2026-09-14T15:42:52.510Z |
-| Run completed | 2026-09-15T07:53:12.274Z |
+| Run completed | 2026-09-15T08:19:34.821Z |
 | Utterances scored | 50 of 66 (complete cases) |
 | Languages | 13 (CORE set: 7) |
 | Exclusions | {"tooLong":0,"emptyTranscription":0,"tooFewTokens":38,"malformedTags":10,"truncatedDecode":1} |
@@ -68,13 +68,15 @@ We address (3) directly by scoring under three normalisation regimes of increasi
 
 ## T3 · Headline - CORE-7 corpus WER
 
-| System | Track A (diacritic-sensitive) | Track B (diacritic-insensitive) | Diacritic tax | Macro-avg (A) | Coverage |
-| --- | --- | --- | --- | --- | --- |
-| Google gemini-3.5-transcribe (dedicated ASR) | 35.42% [29.12%, 42.50%] | 33.41% [27.24%, 40.42%] | 2.01% | 38.59% | 10/13 |
-| Intron Sahara STT (streaming) | 60.78% [46.86%, 75.96%] | 56.42% [43.38%, 70.75%] | 4.36% | 62.42% | 13/13 |
-| AssemblyAI Universal-3.5 Pro | 69.05% [61.94%, 76.64%] | 68.72% [61.66%, 76.25%] | 0.34% | 72.70% | 7/13 |
+| System | Track A (diacritic-sensitive) | Track B (diacritic-insensitive) | Diacritic tax | Macro-avg (CORE-7) | Macro-avg (All supported) | Coverage |
+| --- | --- | --- | --- | --- | --- | --- |
+| Google gemini-3.5-transcribe (dedicated ASR) | 35.42% [29.12%, 42.50%] | 33.41% [27.24%, 40.42%] | 2.01 pp | 38.59% | 44.95% (10 langs) | 10/13 |
+| Intron Sahara STT (streaming) | 60.78% [46.86%, 75.96%] | 56.42% [43.38%, 70.75%] | 4.36 pp | 62.42% | 65.02% (13 langs) | 13/13 |
+| AssemblyAI Universal-3.5 Pro | 69.05% [61.94%, 76.64%] | 68.72% [61.66%, 76.25%] | 0.34 pp | 72.70% | 72.70% (7 langs) | 7/13 |
 
-> **Diacritic tax** = Track A WER - Track B WER: how much of a system's apparent error is orthographic convention rather than recognition. A near-zero tax for one vendor while others pay 8-15 points would quantify a house-style advantage rather than merely suspecting one.
+> **Diacritic tax** = Track A WER - Track B WER: how much of a system's apparent error is orthographic convention rather than recognition. Reported in percentage points (pp).
+> **Macro-avg (CORE-7)** is computed strictly across the 7 intersection languages shared by all three systems (`af`, `am`, `fr`, `ha`, `sn`, `sw`, `yo`), providing an unconfounded like-for-like macro average where every system is evaluated on the exact same languages.
+> **Macro-avg (All supported)** shows the unaligned macro-average across all languages claimed by each vendor; these unaligned averages cannot be compared directly as they span different language pools.
 
 ## T4 · Paired differences
 
@@ -100,13 +102,13 @@ We address (3) directly by scoring under three normalisation regimes of increasi
 
 These are point-of-interest metrics that the AfriSwitch corpus tags enable and which the corpus paper explicitly does not report. Reference language tags are gold, taken from the corpus's `transcription_tagged` column; hypothesis tags are projected through the word-level alignment.
 
-| System | WER matrix | WER English | Ratio EN/matrix | SPER | non-SPER | Switch penalty Δ | EN spans deleted | CMI slope |
+| System | WER matrix | WER English | Ratio EN/matrix | SPER | non-SPER | Switch penalty Δ (pp) | EN spans deleted | CMI slope |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Intron Sahara STT (streaming) | 60.05% | 56.25% | 0.94 | 79.61% | 56.93% | 22.67% | 9.23% | 0.00150 |
-| AssemblyAI Universal-3.5 Pro | 68.44% | 69.44% | 1.01 | 70.39% | 68.78% | 1.62% | 19.23% | 0.00493 |
-| Google gemini-3.5-transcribe (dedicated ASR) | 29.29% | 62.50% | 2.13 | 52.63% | 31.90% | 20.73% | 18.46% | 0.00831 |
+| Intron Sahara STT (streaming) | 60.05% | 56.25% | 0.94 | 79.61% | 56.93% | 22.67 pp | 9.23% | 0.00150 |
+| AssemblyAI Universal-3.5 Pro | 68.44% | 69.44% | 1.01 | 70.39% | 68.78% | 1.62 pp | 19.23% | 0.00493 |
+| Google gemini-3.5-transcribe (dedicated ASR) | 29.29% | 62.50% | 2.13 | 52.63% | 31.90% | 20.73 pp | 18.46% | 0.00831 |
 
-> **Switch penalty Δ** = SPER - non-SPER, the extra error rate incurred at a language boundary specifically. It is the most code-switching-specific number here.
+> **Switch penalty Δ** = SPER - non-SPER, the extra error rate incurred at a language boundary specifically, reported in percentage points (pp). It is the most code-switching-specific number here.
 > **Ratio EN/matrix** diagnoses failure *mode*: a system that force-decodes everything into English shows a low ratio; one that drops the embedded English shows a high one.
 > **CMI slope** is the length-weighted OLS slope of per-utterance WER on the corpus's own code-mixing index - how fast a system degrades as mixing intensifies, as distinct from simply being worse overall.
 >
