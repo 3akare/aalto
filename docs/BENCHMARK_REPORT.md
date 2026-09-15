@@ -29,10 +29,12 @@ Google Gemini 3.5 Transcribe leads significantly on headline acoustic accuracy o
 | Sampling seed | `aalto-afriswitch-v1` |
 | Tier | smoke (5 utterances/language) |
 | Manifest frozen | 2026-09-14T15:42:52.510Z |
-| Run completed | 2026-09-15T08:19:34.821Z |
+| Run completed | 2026-09-15T08:33:08.136Z |
 | Utterances scored | 50 of 66 (complete cases) |
 | Languages | 13 (CORE set: 7) |
 | Exclusions | {"tooLong":0,"emptyTranscription":0,"tooFewTokens":38,"malformedTags":10,"truncatedDecode":1} |
+
+> **Exclusion Semantics:** Exclusions reflect corpus-level ingest filtering prior to manifest selection, not per-utterance run drops ($66 \to 50$ complete cases).
 
 | System | Model pinned |
 | --- | --- |
@@ -159,6 +161,8 @@ A transcript can post a respectable word error rate and still be useless for fil
 | `yo` | 5 | 107.97% [81.74%, 133.92%] | 92.75% [84.82%, 99.33%] | 54.35% [41.78%, 67.52%] |
 
 ¹ Vendor does not claim support for this language. Shown for completeness, excluded from all averages and all significance tests.
+
+> **WER > 100% Note:** Under standard Levenshtein distance where $\text{WER} = (S + D + I) / N$, rates exceeding 100% (e.g. AssemblyAI on Amharic at 111.81%, Intron on Shona at 116.46%) are mathematically valid and indicate that insertion counts ($I$) exceed reference length ($N$).
 
 ## T9 · Honest negative results and limitations
 

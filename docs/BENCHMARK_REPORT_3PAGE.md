@@ -45,6 +45,8 @@ Per language: `af` (5), `am` (5), `fr` (4), `ha` (4), `ig` (3), `lg` (2), `om` (
 | Too few tokens | 38 | Transcript below minimum reference token threshold (< 3 tokens) |
 | Malformed tags | 10 | Unbalanced or unclosed `[[EN]]` annotations in corpus |
 
+*Exclusions reflect corpus-level ingest filtering prior to manifest selection, not per-utterance run drops ($66 \to 50$).*
+
 **Preprocessing & Execution.** Decoded once to 16 kHz mono PCM16 WAV - the corpus's native
 rate, no resampling - and **byte-identical audio sent to every vendor**, SHA-256
 recorded per clip. Intron was evaluated via WebSocket real-time causal streaming
@@ -106,6 +108,7 @@ is a ratio of sums, never a mean of per-utterance ratios.
 | Macro-average (All supported) | | 65.02% (13 langs) | 72.70% (7 langs) | 44.95% (10 langs) |
 
 Macro-average (CORE-7) weights the 7 intersection languages equally for a strict like-for-like comparison. Macro-average (All supported) reflects each vendor's full claimed language catalog; these unaligned averages cannot be compared directly as their language pools differ. Unsupported vendor languages (Igbo, Luganda, Oromo, Pidgin, Kinyarwanda, Tswana) are excluded from CORE-7.
+*Note on WER > 100%: Under standard Levenshtein distance $\text{WER} = (S + D + I) / N$, error rates exceed 100% when insertion counts ($I$) exceed reference length ($N$), as observed in AssemblyAI on Amharic (111.81%) and Sahara on Shona (116.46%).*
 
 ### Downstream task - entity accuracy
 

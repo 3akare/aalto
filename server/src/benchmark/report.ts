@@ -168,6 +168,10 @@ export function renderReport(r: ReportInput): string {
   out.push(`| Languages | ${r.languages.length} (CORE set: ${r.coreLanguages.length}) |`);
   out.push(`| Exclusions | ${JSON.stringify(r.manifest.exclusions)} |`);
   out.push("");
+  out.push(
+    "> **Exclusion Semantics:** Exclusions reflect corpus-level ingest filtering prior to manifest selection, not per-utterance run drops ($66 \\to 50$ complete cases)."
+  );
+  out.push("");
   out.push("| System | Model pinned |");
   out.push("| --- | --- |");
   for (const p of r.providers) out.push(`| ${p.name} | \`${p.modelId}\` |`);
@@ -420,6 +424,12 @@ export function renderReport(r: ReportInput): string {
   out.push(
     "¹ Vendor does not claim support for this language. Shown for completeness, excluded from " +
       "all averages and all significance tests."
+  );
+  out.push("");
+  out.push(
+    "> **WER > 100% Note:** Under standard Levenshtein distance where $\\text{WER} = (S + D + I) / N$, " +
+      "rates exceeding 100% (e.g. AssemblyAI on Amharic at 111.81%, Intron on Shona at 116.46%) are mathematically " +
+      "valid and indicate that insertion counts ($I$) exceed reference length ($N$)."
   );
   out.push("");
 
