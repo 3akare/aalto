@@ -27,7 +27,7 @@ Google Gemini 3.5 Transcribe achieved the lowest headline corpus Word Error Rate
 | System | Strengths | Weaknesses |
 | --- | --- | --- |
 | **Sahara STT (streaming)** | Superior retention of embedded English (9.23% dropped spans); dominant on native African phonotactics (Amharic 13.19% WER, Hausa 23.96% WER); real-time streaming architecture. | Evaluated under causal streaming constraints without future lookahead (inherent acoustic penalty vs batch); requires per-language warm-up; higher switch penalty (22.67 pp). |
-| **AssemblyAI Universal-3.5 Pro** | High infrastructure reliability (0 hard failures); near-perfect French ASR (6.75% WER); non-causal batch processing. | Only claims 7 of 14 AfriSwitch languages; severe breakdown on Ge'ez script (Amharic 111.81% WER) and weak matrix Hausa (79.17% WER); 1.62 pp switch penalty is an artifact of uniform clip failure. |
+| **AssemblyAI Universal-3.5 Pro** | High infrastructure reliability (0 hard failures); near-perfect French ASR (6.75% WER); non-causal batch processing. | Only claims 7 of the 13 evaluated AfriSwitch languages (7 of 14 corpus languages); severe breakdown on Ge'ez script (Amharic 111.81% WER) and weak matrix Hausa (79.17% WER); 1.62 pp switch penalty is an artifact of uniform clip failure. |
 | **Gemini 3.5 Transcribe** | Lowest overall corpus WER on CORE-7 (35.42%); strong on Swahili (35.97%), Afrikaans (37.50%), and Yoruba (54.35%); full non-causal bidirectional context. | Matrix BCP-47 prompt conditioning biases decoder against embedded English (English WER 62.50%, 18.46% dropped spans); free-tier daily quota limit (25 req/day ceiling). |
 | *Gemini 3.8 Flash (excluded)* | - | Returned no usable transcript: quota exhaustion, plus safety-filter refusals on sensitive audio. Excluded from accuracy scoring per pre-registration. |
 
@@ -169,6 +169,6 @@ returns nothing.
 - **Language Conditioning Confound:** Gemini was prompted with matrix language BCP-47 tags, creating an inductive prior that degraded embedded English accuracy.
 - **Sample Size ($N=50$ complete cases):** While CORE-7 headline differences are statistically significant under utterance-level resampling, secondary metrics and single-language cells have wider variance and require $N \ge 1,000$ for unconditioned production guidance.
 - **Vendor Rate Limits:** Gemini 3.5 Transcribe was constrained by the 25 requests/day free-tier ceiling, managed via deterministic disk caching.
-- **Agglutinative Tokenisation:** Whitespace tokenisation understates word errors for agglutinative Bantu languages (Zulu, Kinyarwanda, Luganda) - read CER alongside WER.
+- **Agglutinative Tokenisation:** Whitespace tokenisation understates word errors for agglutinative Bantu languages (Shona, Kinyarwanda, Luganda) - read CER alongside WER.
 - **Amharic Diacritic Invariance:** Ge'ez is a syllabary with no combining marks, making Track B diacritic-stripping a no-op for Amharic.
 - **Numeral Normalisation:** Numeral canonicalisation is applied to English number words only; matrix-language numerals are scored as written.

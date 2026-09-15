@@ -29,7 +29,7 @@ Google Gemini 3.5 Transcribe leads significantly on headline acoustic accuracy o
 | Sampling seed | `aalto-afriswitch-v1` |
 | Tier | smoke (5 utterances/language) |
 | Manifest frozen | 2026-09-14T15:42:52.510Z |
-| Run completed | 2026-09-15T08:33:08.136Z |
+| Run completed | 2026-09-15T08:49:51.395Z |
 | Utterances scored | 50 of 66 (complete cases) |
 | Languages | 13 (CORE set: 7) |
 | Exclusions | {"tooLong":0,"emptyTranscription":0,"tooFewTokens":38,"malformedTags":10,"truncatedDecode":1} |
@@ -171,7 +171,7 @@ A transcript can post a respectable word error rate and still be useless for fil
 - **Smoke Sample Size ($N=50$):** This run serves as an audited diagnostic and methodology demonstration. While headline acoustic differences on CORE-7 are statistically significant under utterance-level resampling, secondary metrics (such as numeral extraction with $N_{num}=2$ tokens) and fine-grained per-language estimates require $N \ge 1,000$ complete cases for definitive production guidance.
 - **API Quota & Concurrency Ceilings:** Google Gemini free-tier enforces a strict 25 requests/day ceiling (`GenerateRequestsPerDayPerProjectPerModel-FreeTier`). The evaluation relies on deterministic disk caching to prevent benchmark stalls.
 - **Language Coverage:** Coverage differs across vendors; the headline comparison is restricted to the CORE-7 intersection where all three vendors claim support. Non-CORE languages are excluded from headline averages.
-- **Agglutinative Morphology:** Whitespace tokenisation understates word-level errors for agglutinative Bantu languages (Zulu, Kinyarwanda, Luganda), where one orthographic word carries several morphemes. Character error rate (CER) should be read alongside WER for these languages.
+- **Agglutinative Morphology:** Whitespace tokenisation understates word-level errors for agglutinative Bantu languages (Shona, Kinyarwanda, Luganda), where one orthographic word carries several morphemes. Character error rate (CER) should be read alongside WER for these languages.
 - **Amharic Diacritic Invariance:** Track B (diacritic removal) is a no-op for Amharic because the Ge'ez script is an abugida without separate combining diacritics.
 - **Numeral Normalisation:** Numeral canonicalisation is applied to English number words only; matrix-language numerals are scored as written. While applied symmetrically across systems, residual orthographic variation remains.
 - **Publisher House-Style:** Orthographic house-style advantage is bounded by Kendall's τ rank-invariance across normalisation tracks (T5), but residual vocabulary bias cannot be eliminated from a single-corpus benchmark.

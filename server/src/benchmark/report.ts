@@ -452,7 +452,7 @@ export function renderReport(r: ReportInput): string {
     "- **Language Coverage:** Coverage differs across vendors; the headline comparison is restricted to the CORE-7 intersection where all three vendors claim support. Non-CORE languages are excluded from headline averages."
   );
   out.push(
-    "- **Agglutinative Morphology:** Whitespace tokenisation understates word-level errors for agglutinative Bantu languages (Zulu, Kinyarwanda, Luganda), where one orthographic word carries several morphemes. Character error rate (CER) should be read alongside WER for these languages."
+    "- **Agglutinative Morphology:** Whitespace tokenisation understates word-level errors for agglutinative Bantu languages (Shona, Kinyarwanda, Luganda), where one orthographic word carries several morphemes. Character error rate (CER) should be read alongside WER for these languages."
   );
   out.push(
     "- **Amharic Diacritic Invariance:** Track B (diacritic removal) is a no-op for Amharic because the Ge'ez script is an abugida without separate combining diacritics."
