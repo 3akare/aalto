@@ -1,0 +1,24 @@
+{
+  "name": "aalto",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A voice agent that lives in your browser, built on AssemblyAI's Voice Agent API.",
+  "scripts": {
+    "sync-shared": "node scripts/sync-shared.mjs",
+    "sync-shared:check": "node scripts/sync-shared.mjs --check",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "verify": "npm run sync-shared:check && npm run lint && npm test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "happy-dom": "21.0.4",
+    "vitest": "5.1.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
