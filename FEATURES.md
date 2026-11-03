@@ -205,6 +205,13 @@ Files: `scripts/package-extension.mjs`, `.github/workflows/ci.yml`
 
 ## Not done, and why
 
-- **Live check (2026-11-03), protocol level only.** With a real key: the local Worker minted a token, the shipped `AgentSession` reached `session.ready` in ~1.1 s, ended with `session.ended`, and the lease was released. Speech in and out (microphone, playback) has not been exercised live.
+- **Live checks (2026-11-03), with a real key, speech synthesised by macOS `say`:**
+  - *Protocol:* the local Worker minted a token; `AgentSession` reached `session.ready` in ~1.1 s and ended cleanly.
+  - *Voice in, voice out (Node):* 48 kHz speech → `pcm-worklet` → `AgentSession` → API. Heard verbatim, called `get_context` → `read_text`, answered correctly from the page, 5.4 s of reply audio.
+  - *The demo in Chrome:* only `getUserMedia` replaced with the synthetic speech; the page's AudioContext, worklet, socket, executor and speaker are the shipped code. "Open the registration form. My name is Dana Whitfield, I'm in retail, and I'm a sole trader." → switch tab, three fields filled correctly, spoken confirmation.
+  - **Bug found live, fixed:** "Business type" filled **Proposed business name** with "sole trader". Cause: `type` was a stopword, so the label meant just "business", a perfect match for the wrong field. Second cause: ties were broken by page order. Fixed both (`pickField` refuses ties, naming both fields); re-run live with the business name left empty.
+  - *Observed, not fixed:* speech that starts while the greeting is still playing interrupts it (barge-in works), but only the tail of the utterance was transcribed. The agent didn't call `highlight` after answering about the page, as the prompt asks.
+  - Still not exercised: a physical microphone and the installed extension (as opposed to the demo).
 - **Extension not loaded in Chrome by these checks.** The chrome.* surface is covered by an in-memory fake. Before release, load `extension/` unpacked and run one session.
 - **Prompt injection is reduced, not eliminated.** The prompt rule, delimiter fencing, and the code guards (read-back before submit, never-guess, sensitive fields, URL policy, sender trust) bound what a hostile page can make the agent do. An LLM reading untrusted pages can still be misled into, say, closing a tab.
+| Live | `fix(matching): keep "type" as a word and refuse tied fields` | Found by a live voice session; TDD red → green, re-run live |

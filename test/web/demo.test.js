@@ -63,6 +63,14 @@ describe("demo: the never-guess guard", () => {
     expect(choice).toBeDefined();
   });
 
+  it("refuses a label that fits two fields, and writes neither", async () => {
+    // Found live: "business type" put "sole trader" into the business name box.
+    await expect(
+      runTool("fill_field", { label: "Business type", value: "sole trader" })
+    ).rejects.toThrow(/could be "Proposed business name" or "Type of registration"/);
+    expect(document.getElementById("f-business").value).toBe("");
+  });
+
   it("refuses a label that matches no field", async () => {
     await expect(runTool("fill_field", { label: "favourite planet", value: "x" })).rejects.toThrow(
       /nothing on this page matches/

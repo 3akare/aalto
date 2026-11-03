@@ -4,7 +4,7 @@
  * code, from the same shared/ directory - only the hands are different.
  */
 
-import { FIELD_THRESHOLD, similarity } from "../vendor/shared/matching.js";
+import { pickField } from "../vendor/shared/matching.js";
 import { findOnPage, goToSection, scrollPage } from "../vendor/shared/page-nav.js";
 import * as sandbox from "./sandbox/sandbox.js";
 
@@ -76,18 +76,21 @@ export async function runTool(name, args) {
 
     case "fill_field": {
       const fields = sandbox.collectFields();
-      const scored = fields
-        .map((f) => ({ f, score: similarity(args.label, f.label) }))
-        .sort((a, b) => b.score - a.score);
-
-      if (!scored[0] || scored[0].score < FIELD_THRESHOLD) {
+      const pick = pickField(fields, args.label);
+      if (!pick) {
         throw new Error(
           `nothing on this page matches "${args.label}". The fields are: ${fields
             .map((f) => f.label)
             .join(", ")}.`
         );
       }
-      const outcome = scored[0].f.write(args.value);
+      if (pick.tied) {
+        const [a, b] = pick.tied;
+        throw new Error(
+          `"${args.label}" could be "${a}" or "${b}". Call fill_field again with the exact label of the one they meant, or ask them.`
+        );
+      }
+      const outcome = pick.field.write(args.value);
       if (!outcome.ok) throw new Error(outcome.error);
       filledAt = ++clock;
       return outcome.detail;

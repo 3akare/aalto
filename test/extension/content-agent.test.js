@@ -121,6 +121,28 @@ describe("filling forms", () => {
     expect(tool("review_form").detail).toMatch(/Sector: Retail/);
   });
 
+  it("refuses a label that fits two fields, and writes neither", () => {
+    // The demo form's labels, where a live session put "sole trader" into the
+    // business name box: "business type" is half of each.
+    document.body.innerHTML = `
+      <form>
+        <label for="biz">Proposed business name</label><input id="biz">
+        <fieldset><legend>Type of registration</legend>
+          <label><input type="radio" name="r" value="sole"> Sole trader</label>
+        </fieldset>
+      </form>`;
+    const res = tool("fill_field", { label: "business type", value: "sole trader" });
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/could be "Proposed business name" or "Type of registration"/);
+    expect(document.getElementById("biz").value).toBe("");
+    expect(document.querySelector('[value="sole"]').checked).toBe(false);
+  });
+
+  it("still fills an exact label when a weaker one shares a word", () => {
+    expect(tool("fill_field", { label: "business type", value: "sole trader" }).ok).toBe(true);
+    expect(document.querySelector('[value="sole"]').checked).toBe(true);
+  });
+
   it("tolerates a non-string value from the model", () => {
     expect(tool("fill_field", { label: "name", value: 42 }).ok).toBe(true);
     expect(document.getElementById("name").value).toBe("42");

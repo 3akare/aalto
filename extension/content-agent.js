@@ -368,7 +368,9 @@ const STOPWORDS = new Set([
   "select",
   "choose",
   "provide",
-  "type",
+  // Not "type": it is filler in "Type your email", but the whole point of
+  // "Business type" or "Type of registration". Dropping it made "business
+  // type" mean just "business", a perfect match for "Proposed business name".
   "in",
   "of",
   "for",
@@ -433,6 +435,31 @@ function similarity(spoken, questionText) {
 
 /** How close a spoken label must be to count as naming a field. */
 const FIELD_THRESHOLD = 0.34;
+
+/** How close the runner-up may score before the best is no longer a clear winner. */
+const TIE_MARGIN = 0.15;
+
+/**
+ * The field a spoken label names: `{ field }`, `{ tied: [label, label] }` when
+ * two fields fit about equally, or null when none is close.
+ *
+ * A tie is refused rather than broken by page order: "name" is a perfect
+ * match for both "Full name of applicant" and "Proposed business name", and
+ * taking whichever came first puts a value in the wrong box silently - the
+ * guess bestOption exists to prevent. Naming both lets the agent ask, or retry
+ * with the exact label.
+ */
+function pickField(fields, spokenLabel) {
+  const scored = fields
+    .map((field) => ({ field, score: similarity(spokenLabel, field.label) }))
+    .sort((a, b) => b.score - a.score);
+  const [best, runnerUp] = scored;
+  if (!best || best.score < FIELD_THRESHOLD) return null;
+  if (runnerUp && runnerUp.score >= best.score - TIE_MARGIN) {
+    return { tied: [best.field.label, runnerUp.field.label] };
+  }
+  return { field: best.field };
+}
 
 /** Higher than the field threshold on purpose: naming the wrong field wastes a
  *  turn, picking the wrong option puts a wrong answer into a form. */
@@ -1062,11 +1089,8 @@ function fillField(spokenLabel, value) {
   const fields = collectFields();
   if (fields.length === 0) return { ok: false, error: "there are no fields on this page" };
 
-  const scored = fields
-    .map((f) => ({ field: f, score: similarity(spokenLabel, f.label) }))
-    .sort((a, b) => b.score - a.score);
-
-  if (scored[0].score < FIELD_THRESHOLD) {
+  const pick = pickField(fields, spokenLabel);
+  if (!pick) {
     return {
       ok: false,
       error: `nothing on this page matches "${spokenLabel}". The fields are: ${fields
@@ -1074,8 +1098,15 @@ function fillField(spokenLabel, value) {
         .join(", ")}.`,
     };
   }
-  const outcome = scored[0].field.write(value);
-  if (outcome.ok) lastFilledForm = scored[0].field.el.closest("form");
+  if (pick.tied) {
+    const [a, b] = pick.tied;
+    return {
+      ok: false,
+      error: `"${spokenLabel}" could be "${a}" or "${b}". Call fill_field again with the exact label of the one they meant, or ask them.`,
+    };
+  }
+  const outcome = pick.field.write(value);
+  if (outcome.ok) lastFilledForm = pick.field.el.closest("form");
   return outcome;
 }
 

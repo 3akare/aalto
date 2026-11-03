@@ -4,6 +4,7 @@ import {
   FIELD_THRESHOLD,
   normalize,
   OPTION_THRESHOLD,
+  pickField,
   similarity,
   toIsoDate,
   tokenise,
@@ -83,5 +84,47 @@ describe("toIsoDate", () => {
 
   it("does not throw on non-strings", () => {
     expect(toIsoDate(undefined)).toBeNull();
+  });
+});
+
+describe("pickField - a tie is not a match", () => {
+  // The demo form's labels; the live test that found this used exactly these.
+  const fields = [
+    "Full name of applicant",
+    "Phone number",
+    "Date of birth",
+    "Proposed business name",
+    "Sector",
+    "Type of registration",
+  ].map((label) => ({ label }));
+
+  it("picks the field that was clearly named", () => {
+    expect(pickField(fields, "full name")).toEqual({ field: fields[0] });
+    expect(pickField(fields, "Type of registration")).toEqual({ field: fields[5] });
+  });
+
+  it("refuses a label that fits two fields equally, naming both", () => {
+    // "business type": half of "Proposed business name", half of "Type of registration".
+    expect(pickField(fields, "business type")).toEqual({
+      tied: ["Proposed business name", "Type of registration"],
+    });
+    expect(pickField(fields, "name")).toEqual({
+      tied: ["Full name of applicant", "Proposed business name"],
+    });
+  });
+
+  it("returns null when nothing is close", () => {
+    expect(pickField(fields, "favourite planet")).toBeNull();
+    expect(pickField([], "name")).toBeNull();
+  });
+});
+
+describe("type is a word, not filler", () => {
+  it("keeps 'type' in a label like 'Business type'", () => {
+    expect(tokenise("Business type")).toEqual(["business", "type"]);
+  });
+
+  it("still matches a field whose label starts with the filler verb", () => {
+    expect(similarity("email", "Type your email")).toBe(1);
   });
 });
