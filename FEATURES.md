@@ -135,17 +135,20 @@ Findings
 - [x] 17 tests: secrets never leave the page, fills, dates, never-guess, dropdowns, scoped submit, dictation
 - F09 follow-up: `get_context` must describe a `sensitive` field without its contents
 
-## F09 · Extension: background (sessions, tools, guards, tabs, macros) — `todo`
+## F09 · Extension: background (sessions, tools, guards, tabs, macros) — `done`
 
 Files: `extension/background.js`, `extension/manifest.json`
 
 Findings
 
-- **Security:** `onMessage` trusts any sender; a content script can send `RUN_TOOL`, `TOGGLE_SESSION` and the rest → accept only extension pages
-- **Security:** the submit guard isn't cleared when a tab navigates, so a read-back of form A vouches for form B in the same tab
-- **Leak:** `guards` entries for closed tabs are never removed, and `recorded` grows without bound
-- `open_url` accepts any string; validate it is http(s), case-insensitively
-- `workerUrl` from settings is used without validation (plain-http token transport)
+- [x] **Security:** `onMessage`/`onConnect` trusted any sender, so a compromised content script could call `RUN_TOOL` on every tab → only this extension's own pages (no `sender.tab`)
+- [x] **Security:** the submit guard survived navigation, so form A's read-back vouched for form B in the same tab → cleared on any URL change (pushState included)
+- [x] **Security:** page text could contain `>>>` and break out of the untrusted-quote fence → markers neutralised inside quotes
+- [x] **Security:** `open_url` accepted `javascript:`, `file:`, `chrome:`, `data:`, and mangled `HTTP://` → http(s) only, case-insensitive, `host:port` handled
+- [x] **Security:** the settings endpoint could be plain http (token in clear) or garbage → https only, http allowed for localhost
+- [x] **Leak:** guards for closed tabs were never removed, and `recorded` grew without bound → cleared on close, capped at 50
+- [x] `get_context` describes a sensitive field without its contents (pairs with F08)
+- [x] 33 tests on a fake `chrome`: sender trust, guards, URL policy, fencing, tabs, macros, endpoint policy
 
 ## F10 · Extension: offscreen audio — `todo`
 
@@ -186,3 +189,4 @@ Files: `scripts/package-extension.mjs`, `.github/workflows/ci.yml`
 | F06 | `feat(worker): add token minting and demo budget` | TDD: 8 red (fail-open cap, shared pool, timeout, …) → green |
 | F07 | `feat(web): add landing page and live demo` | TDD: mic leak + close_tabs red → green |
 | F08 | `feat(extension): add page agent content script` | TDD: secret leak + wrong-form submit red → green |
+| F09 | `feat(extension): add background tool dispatch` | TDD: 19 red (sender trust, guard reuse, URL policy, …) → green |
