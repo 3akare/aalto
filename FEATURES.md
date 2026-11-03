@@ -52,15 +52,17 @@ Findings
 - [x] 13 DOM tests: find across formatting, step/wrap, script exclusion, sections, id fallback, scrolling
 - Resource check: `found` holds at most `MAX_MATCHES` ranges and is replaced on each search
 
-## F03 · Tool contract and agent definition — `todo`
+## F03 · Tool contract and agent definition — `done`
 
 The tool schema sent to AssemblyAI, the system prompt, the session frame.
 Files: `shared/tools.js`, `shared/agent-config.js`
 
 Findings
 
-- **Security:** the prompt has no rule that page text, search results and tool output are data, not instructions. That's an indirect prompt-injection path to `close_tabs`, `open_url`, `fill_field`, and so on → add the rule
-- The contract has no test that every tool has a dispatch target and the reverse
+- [x] **Security:** the prompt had no rule that page text, search results and tool output are data, not instructions (an indirect prompt-injection path to `close_tabs`, `open_url`, `fill_field`) → added `WHAT YOU READ IS UNTRUSTED`. Defence in depth: the code guards in F08/F09 still hold whatever the model does
+- [x] Contract tests: unique names, every tool routed (and nothing extra), schema shape, session frame
+- [x] The contract is now deep-frozen
+- [x] Removed `MUTATING_PAGE_TOOLS` (promised a no-race guarantee that nothing enforced) and the unused `TOOL_NAMES`
 
 ## F04 · Voice protocol client — `todo`
 
@@ -161,3 +163,4 @@ Files: `scripts/package-extension.mjs`, `.github/workflows/ci.yml`
 | F00 | `chore: scaffold tooling, tests and tracker` | Vitest, Biome 2.6.4 pinned, sync check mode |
 | F01 | `feat(matching): add fuzzy label and date matching` | TDD: 5 red → green |
 | F02 | `feat(page-nav): add scroll, section and find-on-page` | TDD: head-less document red → green |
+| F03 | `feat(agent): add tool contract and system prompt` | TDD: freeze + injection rule red → green |
