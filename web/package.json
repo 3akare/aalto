@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --env-file ../.env",
     "deploy": "wrangler deploy",
-    "types": "wrangler types --env-file .dev.vars.example",
-    "typecheck": "wrangler types --env-file .dev.vars.example && tsc -p .",
+    "types": "wrangler types --env-file ../.env.example",
+    "typecheck": "wrangler types --env-file ../.env.example && tsc -p .",
     "check": "npm run typecheck && wrangler deploy --dry-run --outdir dist"
   },
   "devDependencies": {

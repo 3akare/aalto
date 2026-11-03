@@ -3,6 +3,8 @@
 A voice agent that lives in your browser, built on
 [AssemblyAI's Voice Agent API](https://www.assemblyai.com/docs/voice-agents).
 
+![Aalto in the side panel: asked about the page, it answers and highlights where the answer came from](aalto-showcase-small.gif)
+
 Press `Alt+A` and talk. Aalto reads the page you are on and answers from it, writes text into
 whatever box you are in, fills forms, and drives your tabs. It is a conversation, not a command
 box: the session stays open, the agent decides when your turn has ended, and you can cut it off
@@ -83,10 +85,10 @@ browser rendered inside the page, driven by the agent through the same tool defi
 extension executes against.
 
 ```bash
+cp .env.example .env             # at the repo root, then paste in your AssemblyAI key
 cd web
 npm install
-cp .dev.vars.example .dev.vars   # then paste in your AssemblyAI key
-npm run dev                      # http://localhost:8787
+npm run dev                      # http://localhost:8787, reads ../.env
 npm run deploy
 ```
 
