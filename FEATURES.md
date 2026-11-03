@@ -105,15 +105,20 @@ Findings
 - [x] `launch.json` ran an unpinned `npx wrangler` from the root → uses the pinned one in `web/`
 - [x] 26 tests: the real ledger SQL on node:sqlite via a `cloudflare:workers` shim, plus routes, CORS, rate limit, refunds, release validation
 
-## F07 · Website and live demo — `todo`
+## F07 · Website and live demo — `done`
 
 Landing page, showcase animation, and the in-page sandbox the agent drives.
 Files: `web/public/**` (except `vendor/`)
 
 Findings
 
-- **Leak:** `Mic.stop()` never closes its `AudioContext`; each session leaks one, and Chrome caps the number of live contexts
-- Served `aalto-1.0.0.zip` is a hand-built artefact that drifts from `extension/` → generate it with a script
+- [x] **Leak:** `Mic.stop()` never closed its `AudioContext`, so each session leaked one, and Chrome caps live contexts → closed on stop
+- [x] **Bug:** `closeOpened` closed any tab with *any* word overlap (score > 0), and "the tabs you opened" closed nothing → threshold match, and "you opened" means all, as in the extension
+- [x] **Bug:** transcript deltas were shown one word at a time (the line blanked on every word) → accumulated per turn
+- [x] Verified in `wrangler dev`: modules load under the new CSP with no console errors
+- [x] 14 tests against the real `index.html` markup: read-back guard, never-guess, tabs, mic lifecycle
+- [ ] Served `aalto-1.0.0.zip` is a hand-built artefact → moved to F12 (generated from the hardened extension)
+- Accepted: the showcase polls every 400 ms while off screen; cheap and cancellable
 
 ## F08 · Extension: page agent (content script) — `todo`
 
@@ -175,3 +180,4 @@ Files: `scripts/package-extension.mjs`, `.github/workflows/ci.yml`
 | F04 | `feat(session): add voice protocol client` | TDD: 3 red (leak, hang, stale result) → green |
 | F05 | `feat(audio): add capture worklet and speaker` | TDD: 88.2 kHz drift red → green |
 | F06 | `feat(worker): add token minting and demo budget` | TDD: 8 red (fail-open cap, shared pool, timeout, …) → green |
+| F07 | `feat(web): add landing page and live demo` | TDD: mic leak + close_tabs red → green |
