@@ -134,6 +134,12 @@ export function toIsoDate(value) {
   return isoIfReal(d.getFullYear(), d.getMonth() + 1, d.getDate());
 }
 
+/**
+ * Round-trip through Date rather than a days-in-month table: Date rolls an
+ * impossible date over (31 Feb becomes 2 or 3 Mar), so it is real exactly when
+ * the parts come back unchanged - leap years included, with nothing to maintain.
+ * UTC so no time zone can shift the day.
+ */
 function isoIfReal(year, month, day) {
   const probe = new Date(Date.UTC(year, month - 1, day));
   const real =

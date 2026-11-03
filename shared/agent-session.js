@@ -192,6 +192,8 @@ export class AgentSession {
   async end() {
     if (this.closing) return;
     this.closing = true;
+    // Results still queued answer questions from a session that is going away;
+    // sending them into session.end would only be rejected.
     this.pendingResults.length = 0;
     if (this.socket?.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify({ type: "session.end" }));
