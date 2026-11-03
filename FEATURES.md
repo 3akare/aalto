@@ -76,14 +76,16 @@ Findings
 - [x] Tool results finishing after `end()` were queued against a dead session → dropped
 - [x] 18 tests on a fake socket: deferral until `reply.done`, interruption, barge-in, PCM round-trip, end/close, listener counts
 
-## F05 · Audio pipeline — `todo`
+## F05 · Audio pipeline — `done`
 
 Microphone resampling worklet, and streamed speech playback.
 Files: `shared/pcm-worklet.js`, `shared/speaker.js`
 
 Findings
 
-- Pure DSP and scheduling logic → unit-test resampling and `stop()`
+- [x] **Bug:** at device rates whose ratio doesn't divide the 128-sample quantum (e.g. 88.2 kHz), the read position overshot the buffer and samples were dropped (audio drift) → overshoot carried in `readPos`. Red on the old code, green on the new
+- [x] **Performance:** `process()` allocated two typed arrays per quantum (~375/s on the real-time thread) → one reusable buffer
+- [x] 15 tests: resampling at 16 k–192 kHz, seam continuity, clamping, speaker scheduling, idle, `stop()` cut-off
 
 ## F06 · Token Worker and demo budget — `todo`
 
@@ -166,3 +168,4 @@ Files: `scripts/package-extension.mjs`, `.github/workflows/ci.yml`
 | F02 | `feat(page-nav): add scroll, section and find-on-page` | TDD: head-less document red → green |
 | F03 | `feat(agent): add tool contract and system prompt` | TDD: freeze + injection rule red → green |
 | F04 | `feat(session): add voice protocol client` | TDD: 3 red (leak, hang, stale result) → green |
+| F05 | `feat(audio): add capture worklet and speaker` | TDD: 88.2 kHz drift red → green |
