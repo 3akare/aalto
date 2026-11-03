@@ -150,15 +150,16 @@ Findings
 - [x] `get_context` describes a sensitive field without its contents (pairs with F08)
 - [x] 33 tests on a fake `chrome`: sender trust, guards, URL policy, fencing, tabs, macros, endpoint policy
 
-## F10 · Extension: offscreen audio — `todo`
+## F10 · Extension: offscreen audio — `done`
 
 Files: `extension/offscreen.js`, `extension/offscreen.html`
 
 Findings
 
-- **Privacy:** the microphone stream is held open after a session ends (the recording indicator stays on) → release it on stop
-- Two concurrent `START_SESSION`s both pass the `if (session)` check → guard the start
-- No sender check on messages
+- [x] **Privacy:** the microphone was held open after a session ended (recording indicator on, device held while idle) → tracks stopped on every stop; the AudioContext is suspended, not leaked
+- [x] **Race:** two concurrent `START_SESSION`s both passed the `if (session)` check → `starting` flag; one mic, one socket
+- [x] **Security:** no sender check → service worker only
+- [x] 6 tests: mic release, restart, concurrent start, sender trust, error names, copy
 
 ## F11 · Extension: side panel and permission page — `todo`
 
@@ -190,3 +191,4 @@ Files: `scripts/package-extension.mjs`, `.github/workflows/ci.yml`
 | F07 | `feat(web): add landing page and live demo` | TDD: mic leak + close_tabs red → green |
 | F08 | `feat(extension): add page agent content script` | TDD: secret leak + wrong-form submit red → green |
 | F09 | `feat(extension): add background tool dispatch` | TDD: 19 red (sender trust, guard reuse, URL policy, …) → green |
+| F10 | `feat(extension): add offscreen mic and socket` | TDD: mic held open + start race red → green |

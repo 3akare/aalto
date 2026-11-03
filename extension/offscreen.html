@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Aalto offscreen worker</title>
+  </head>
+  <body>
+    <!--
+      Invisible document that owns the microphone and the speaker.
+
+      The side panel cannot do this job: the session has to survive it being
+      closed. The service worker cannot either - it has no Web Audio, and it is
+      torn down while idle, which a live voice session never is.
+    -->
+    <script type="module" src="offscreen.js"></script>
+  </body>
+</html>
