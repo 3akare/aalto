@@ -15,10 +15,17 @@ beforeEach(async () => {
     },
   });
   vi.stubGlobal("chrome", chrome);
+  // background.js debounces storage writes and runs an idle timer. Faked, so
+  // none of them fires after this test has taken the chrome stub away.
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   vi.resetModules();
   await import("../../extension/background.js");
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.clearAllTimers();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 const runTool = (name, args = {}, sender = OFFSCREEN) =>
   sendFrom(chrome, sender, { type: "RUN_TOOL", name, args });

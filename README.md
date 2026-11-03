@@ -115,7 +115,9 @@ npm run verify          # sync check, lint, and the test suite - what CI runs
 cd web && npx wrangler deploy --dry-run
 ```
 
-`npm run sync-shared:check` fails if a generated copy has drifted from `shared/`.
+`npm run sync-shared:check` fails if a generated copy has drifted from `shared/`, and
+`npm run package:check` fails if the downloadable zip lags behind `extension/` - rebuild it
+with `npm run package`. CI runs all of it on every push.
 [FEATURES.md](FEATURES.md) tracks each feature's review and test status.
 
 ## Licence

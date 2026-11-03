@@ -28,7 +28,7 @@ Findings
 
 - [x] No test runner or tests anywhere in the project → added Vitest (happy-dom for DOM code)
 - [x] `npm run sync-shared` had no check mode → added `--check` and `npm run verify`
-- [ ] No CI → moved to F12
+- [x] No CI → added in F12
 
 ## F01 · Fuzzy matching — `done`
 
@@ -117,7 +117,7 @@ Findings
 - [x] **Bug:** transcript deltas were shown one word at a time (the line blanked on every word) → accumulated per turn
 - [x] Verified in `wrangler dev`: modules load under the new CSP with no console errors
 - [x] 14 tests against the real `index.html` markup: read-back guard, never-guess, tabs, mic lifecycle
-- [ ] Served `aalto-1.0.0.zip` is a hand-built artefact → moved to F12 (generated from the hardened extension)
+- [x] Served `aalto-1.0.0.zip` was a hand-built artefact → generated in F12
 - Accepted: the showcase polls every 400 ms while off screen; cheap and cancellable
 
 ## F08 · Extension: page agent (content script) — `done`
@@ -175,9 +175,13 @@ Findings
 - [x] 11 tests: markup safety, copy, settings validation, status, transcript rendering
 - Accepted: two `noDescendingSpecificity` warnings where the later, lower-specificity rule is intended to lose
 
-## F12 · Release packaging and CI — `todo`
+## F12 · Release packaging and CI — `done`
 
 Files: `scripts/package-extension.mjs`, `.github/workflows/ci.yml`
+
+- [x] The served zip was hand-built and shipped 13 stale files (none of this hardening) → `npm run package` builds it from `extension/`; `package:check` compares contents and fails on drift
+- [x] CI (GitHub Actions, read-only token): sync check, zip check, lint, tests, Worker type-check, wrangler dry run
+- [x] Background tests left debounce timers firing after teardown (unhandled errors in the full run) → fake timers, cleared per test; 3 consecutive clean runs
 
 ---
 
@@ -197,3 +201,10 @@ Files: `scripts/package-extension.mjs`, `.github/workflows/ci.yml`
 | F09 | `feat(extension): add background tool dispatch` | TDD: 19 red (sender trust, guard reuse, URL policy, …) → green |
 | F10 | `feat(extension): add offscreen mic and socket` | TDD: mic held open + start race red → green |
 | F11 | `feat(extension): add side panel and permission page` | TDD: 8 red (innerHTML injection, settings, copy) → green |
+| F12 | `build: package the extension zip and add CI` | Zip regenerated from hardened source |
+
+## Not done, and why
+
+- **Live voice session not exercised end to end.** It needs an AssemblyAI key. Everything up to the socket is tested against fakes; the Worker was run under `wrangler dev`.
+- **Extension not loaded in Chrome by these checks.** The chrome.* surface is covered by an in-memory fake. Before release, load `extension/` unpacked and run one session.
+- **Prompt injection is reduced, not eliminated.** The prompt rule, delimiter fencing, and the code guards (read-back before submit, never-guess, sensitive fields, URL policy, sender trust) bound what a hostile page can make the agent do. An LLM reading untrusted pages can still be misled into, say, closing a tab.

@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+
+      # Sync check, zip check, lint, and the test suite.
+      - run: npm ci
+      - run: npm run verify
+
+      # The Worker: strict type-check and a bundling dry run, no deploy.
+      - run: npm ci
+        working-directory: web
+      - run: npm run check
+        working-directory: web
