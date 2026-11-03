@@ -41,14 +41,16 @@ Findings
 - [x] Unit tests for normalisation, similarity, the never-guess threshold, dates (25 tests)
 - Note: numeric dates are day-first by design; documented in the code
 
-## F02 · Page navigation — `todo`
+## F02 · Page navigation — `done`
 
 Scroll, jump to a section, find on page, highlight matches.
 Files: `shared/page-nav.js`
 
 Findings
 
-- `mark()` assumes `document.head` exists (fails on SVG/XML documents)
+- [x] `mark()` assumed `document.head` exists and threw on SVG/XML documents → falls back to the root element
+- [x] 13 DOM tests: find across formatting, step/wrap, script exclusion, sections, id fallback, scrolling
+- Resource check: `found` holds at most `MAX_MATCHES` ranges and is replaced on each search
 
 ## F03 · Tool contract and agent definition — `todo`
 
@@ -158,3 +160,4 @@ Files: `scripts/package-extension.mjs`, `.github/workflows/ci.yml`
 | --- | --- | --- |
 | F00 | `chore: scaffold tooling, tests and tracker` | Vitest, Biome 2.6.4 pinned, sync check mode |
 | F01 | `feat(matching): add fuzzy label and date matching` | TDD: 5 red → green |
+| F02 | `feat(page-nav): add scroll, section and find-on-page` | TDD: head-less document red → green |
