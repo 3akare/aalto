@@ -205,6 +205,6 @@ Files: `scripts/package-extension.mjs`, `.github/workflows/ci.yml`
 
 ## Not done, and why
 
-- **Live voice session not exercised end to end.** It needs an AssemblyAI key. Everything up to the socket is tested against fakes; the Worker was run under `wrangler dev`.
+- **Live check (2026-11-03), protocol level only.** With a real key: the local Worker minted a token, the shipped `AgentSession` reached `session.ready` in ~1.1 s, ended with `session.ended`, and the lease was released. Speech in and out (microphone, playback) has not been exercised live.
 - **Extension not loaded in Chrome by these checks.** The chrome.* surface is covered by an in-memory fake. Before release, load `extension/` unpacked and run one session.
 - **Prompt injection is reduced, not eliminated.** The prompt rule, delimiter fencing, and the code guards (read-back before submit, never-guess, sensitive fields, URL policy, sender trust) bound what a hostile page can make the agent do. An LLM reading untrusted pages can still be misled into, say, closing a tab.
