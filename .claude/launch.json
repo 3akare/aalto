@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "aalto-web",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["wrangler", "dev", "--port", "8788", "--cwd", "web"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "web", "--", "--port", "8788"],
       "port": 8788
     }
   ]
