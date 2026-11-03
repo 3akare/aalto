@@ -15,22 +15,23 @@ class FakeSocket {
     // Opens and becomes ready on the next tick, like a fast handshake.
     setTimeout(() => {
       this.readyState = 1;
-      this.handlers.open?.forEach((f) => f());
-      this.handlers.message?.forEach((f) => f({ data: '{"type":"session.ready"}' }));
+      this.emit("open");
+      this.emit("message", { data: '{"type":"session.ready"}' });
     }, 0);
   }
+  emit(type, event) {
+    for (const fn of this.handlers[type] ?? []) fn(event);
+  }
   addEventListener(type, fn) {
-    (this.handlers[type] ??= new Set()).add(fn);
+    if (!this.handlers[type]) this.handlers[type] = new Set();
+    this.handlers[type].add(fn);
   }
   removeEventListener(type, fn) {
     this.handlers[type]?.delete(fn);
   }
   send(data) {
     if (JSON.parse(data).type === "session.end") {
-      setTimeout(
-        () => this.handlers.message?.forEach((f) => f({ data: '{"type":"session.ended"}' })),
-        0
-      );
+      setTimeout(() => this.emit("message", { data: '{"type":"session.ended"}' }), 0);
     }
   }
   close() {

@@ -161,15 +161,19 @@ Findings
 - [x] **Security:** no sender check → service worker only
 - [x] 6 tests: mic release, restart, concurrent start, sender trust, error names, copy
 
-## F11 · Extension: side panel and permission page — `todo`
+## F11 · Extension: side panel and permission page — `done`
 
 Files: `extension/sidepanel.*`, `extension/permission.*`, `extension/icons.js`
 
 Findings
 
-- `permission.js` writes `err.message` into `innerHTML`
-- Settings don't validate the endpoint URL or give feedback when saving
-- The feed has no live region for screen readers
+- [x] **Security:** `permission.js` wrote the browser's error message into `innerHTML` (test proved an `<img onerror>` became live markup) → built as DOM nodes
+- [x] **UX/trust:** the permission page said Aalto "records only while you hold the talk button", but it's a toggle that stays on until stopped or 90 s quiet → copy corrected
+- [x] **UX:** the endpoint setting saved anything silently → validated with the same https rule as F09, inline error, `aria-invalid`, "Saved." confirmation, normalised to an origin
+- [x] **A11y:** status pill and permission status are `role="status"`; the feed is `role="log"` but deliberately not live (replies are already spoken aloud)
+- [x] The `!important` lint suppression sat on the wrong line → moved onto the declaration
+- [x] 11 tests: markup safety, copy, settings validation, status, transcript rendering
+- Accepted: two `noDescendingSpecificity` warnings where the later, lower-specificity rule is intended to lose
 
 ## F12 · Release packaging and CI — `todo`
 
@@ -192,3 +196,4 @@ Files: `scripts/package-extension.mjs`, `.github/workflows/ci.yml`
 | F08 | `feat(extension): add page agent content script` | TDD: secret leak + wrong-form submit red → green |
 | F09 | `feat(extension): add background tool dispatch` | TDD: 19 red (sender trust, guard reuse, URL policy, …) → green |
 | F10 | `feat(extension): add offscreen mic and socket` | TDD: mic held open + start race red → green |
+| F11 | `feat(extension): add side panel and permission page` | TDD: 8 red (innerHTML injection, settings, copy) → green |
