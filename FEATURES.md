@@ -30,15 +30,16 @@ Findings
 - [x] `npm run sync-shared` had no check mode → added `--check` and `npm run verify`
 - [ ] No CI → moved to F12
 
-## F01 · Fuzzy matching — `todo`
+## F01 · Fuzzy matching — `done`
 
 Spoken phrase → field, option, or tab. Dates in plain English.
 Files: `shared/matching.js`
 
 Findings
 
-- `toIsoDate` accepts impossible dates (`31/02/2024` → `2024-02-31`) → validate
-- Pure module: unit-test the thresholds that the safety rule depends on
+- [x] `toIsoDate` accepted impossible dates (`31/02/2024` → `2024-02-31`), bare numbers, and threw on non-strings → now refuses them
+- [x] Unit tests for normalisation, similarity, the never-guess threshold, dates (25 tests)
+- Note: numeric dates are day-first by design; documented in the code
 
 ## F02 · Page navigation — `todo`
 
@@ -156,3 +157,4 @@ Files: `scripts/package-extension.mjs`, `.github/workflows/ci.yml`
 | Feature | Commit | Notes |
 | --- | --- | --- |
 | F00 | `chore: scaffold tooling, tests and tracker` | Vitest, Biome 2.6.4 pinned, sync check mode |
+| F01 | `feat(matching): add fuzzy label and date matching` | TDD: 5 red → green |
