@@ -120,16 +120,20 @@ Findings
 - [ ] Served `aalto-1.0.0.zip` is a hand-built artefact → moved to F12 (generated from the hardened extension)
 - Accepted: the showcase polls every 400 ms while off screen; cheap and cancellable
 
-## F08 · Extension: page agent (content script) — `todo`
+## F08 · Extension: page agent (content script) — `done`
 
 Reads, writes, and fills forms on any page.
 Files: `extension/content-agent.js`
 
 Findings
 
-- **Security:** password and payment fields are read into `get_context`, `read_text field` and `review_form`, which sends their values to the LLM; they can also be filled by voice → mask on read, refuse on write
-- `submit_form` clicks the first matching button anywhere on the page, not the form that was filled → scope it to the form
-- `ensureHighlightStyle` has the same `document.head` assumption as F02
+- [x] **Security:** password, card, CVC and one-time-code fields were read into `get_context`, `read_text field` and `review_form`, sending their values to the LLM, and could be typed by voice → `isSensitive()`: reads say "(filled, hidden)", writes are refused
+- [x] **Bug:** `submit_form` clicked the first "Send"/"Submit" anywhere on the page (a header search, a chat widget) → scoped to the form last filled; disabled buttons skipped
+- [x] `ensureHighlightStyle` threw on documents without `<head>`
+- [x] Non-string tool args from the model are coerced; the sync listener no longer holds the channel open
+- [x] Select read-back uses `options[selectedIndex]` (robust across DOM implementations)
+- [x] 17 tests: secrets never leave the page, fills, dates, never-guess, dropdowns, scoped submit, dictation
+- F09 follow-up: `get_context` must describe a `sensitive` field without its contents
 
 ## F09 · Extension: background (sessions, tools, guards, tabs, macros) — `todo`
 
@@ -181,3 +185,4 @@ Files: `scripts/package-extension.mjs`, `.github/workflows/ci.yml`
 | F05 | `feat(audio): add capture worklet and speaker` | TDD: 88.2 kHz drift red → green |
 | F06 | `feat(worker): add token minting and demo budget` | TDD: 8 red (fail-open cap, shared pool, timeout, …) → green |
 | F07 | `feat(web): add landing page and live demo` | TDD: mic leak + close_tabs red → green |
+| F08 | `feat(extension): add page agent content script` | TDD: secret leak + wrong-form submit red → green |
