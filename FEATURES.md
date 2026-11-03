@@ -64,16 +64,17 @@ Findings
 - [x] The contract is now deep-frozen
 - [x] Removed `MUTATING_PAGE_TOOLS` (promised a no-race guarantee that nothing enforced) and the unused `TOOL_NAMES`
 
-## F04 · Voice protocol client — `todo`
+## F04 · Voice protocol client — `done`
 
 WebSocket session, deferring tool results until `reply.done`, barge-in.
 Files: `shared/agent-session.js`
 
 Findings
 
-- **Leak:** `#waitFor` never removes its `message` listener
-- `connect()` hangs forever if the socket opens but `session.ready` never arrives → add a timeout
-- `#dispatch` results arriving after `end()` are queued against a dead session
+- [x] **Leak:** `#waitFor` never removed its `message` listener → removed on resolve and on timeout
+- [x] `connect()` hung forever if the socket opened but `session.ready` never arrived → 15 s timeout that closes the socket
+- [x] Tool results finishing after `end()` were queued against a dead session → dropped
+- [x] 18 tests on a fake socket: deferral until `reply.done`, interruption, barge-in, PCM round-trip, end/close, listener counts
 
 ## F05 · Audio pipeline — `todo`
 
@@ -164,3 +165,4 @@ Files: `scripts/package-extension.mjs`, `.github/workflows/ci.yml`
 | F01 | `feat(matching): add fuzzy label and date matching` | TDD: 5 red → green |
 | F02 | `feat(page-nav): add scroll, section and find-on-page` | TDD: head-less document red → green |
 | F03 | `feat(agent): add tool contract and system prompt` | TDD: freeze + injection rule red → green |
+| F04 | `feat(session): add voice protocol client` | TDD: 3 red (leak, hang, stale result) → green |
