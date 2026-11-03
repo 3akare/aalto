@@ -3,7 +3,7 @@
 A voice agent that lives in your browser, built on
 [AssemblyAI's Voice Agent API](https://www.assemblyai.com/docs/voice-agents).
 
-![Aalto in the side panel: asked about the page, it answers and highlights where the answer came from](aalto-showcase-small.gif)
+![Aalto's side panel answering a spoken question with a web search, beside its six capabilities: ask, navigate, write, fill forms, run tabs, routines](aalto-showcase-small.gif)
 
 Press `Alt+A` and talk. Aalto reads the page you are on and answers from it, writes text into
 whatever box you are in, fills forms, and drives your tabs. It is a conversation, not a command
